@@ -75,25 +75,22 @@ export default function VoicePage() {
         setVoiceState('listening');
         setErrorMessage('');
       },
-      onResult: (transcript: string, isFinal: boolean, fullSessionTranscript: string) => {
-        const displayText = transcript || fullSessionTranscript;
+      onResult: (transcript: string, isFinal: boolean, fullSessionTranscript: string, alternatives: string[] = []) => {
+        const displayText = transcript || fullSessionTranscript || (alternatives[0] || '');
         setLastTranscript(displayText);
 
         if (isFinal && displayText) {
           setTranscriptLog((prev) => [displayText, ...prev.slice(0, 4)]);
         }
 
-        console.log('[VoicePage] 🎤 Heard:', displayText, isFinal ? '(FINAL)' : '(INTERIM)');
+        console.log('[VoicePage] 🎤 Heard:', displayText, isFinal ? '(FINAL)' : '(INTERIM)', 'Alternatives:', alternatives);
 
-        // Active triggers list
-        const activeTriggers = Array.from(
-          new Set(['help', 'bachao', 'suraksha', 'madad karo', 'madad', savedWordRef.current?.toLowerCase()].filter(Boolean))
-        );
+        // Active custom secret trigger word
+        const customTriggers = [savedWordRef.current?.toLowerCase()].filter(Boolean) as string[];
 
-        // Check both chunk and full utterance
-        const matchedWord =
-          triggerWordMatcher.findMatch(transcript, activeTriggers) ||
-          triggerWordMatcher.findMatch(fullSessionTranscript, activeTriggers);
+        // Check chunk, fullSessionTranscript, and all candidate alternatives
+        const candidates = [transcript, fullSessionTranscript, ...alternatives].filter(Boolean);
+        const matchedWord = triggerWordMatcher.findMatch(candidates, customTriggers);
 
         if (matchedWord && !triggeringRef.current) {
           console.log('[VoicePage] 🚨 Emergency Trigger Detected:', matchedWord);

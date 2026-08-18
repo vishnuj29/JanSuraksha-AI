@@ -17,7 +17,7 @@ export interface VoiceServiceConfig {
   lang?: string;
   continuous?: boolean;
   interimResults?: boolean;
-  onResult: (transcript: string, isFinal: boolean, fullSessionTranscript: string) => void;
+  onResult: (transcript: string, isFinal: boolean, fullSessionTranscript: string, alternatives?: string[]) => void;
   onError: (error: string) => void;
   onStart?: () => void;
   onEnd?: () => void;
@@ -257,6 +257,7 @@ export class VoiceService {
       let cumulativeTranscript = '';
       let currentChunk = '';
       let isFinal = false;
+      const allAlternatives: string[] = [];
 
       // 1. Cumulative transcript across all speech events
       for (let i = 0; i < event.results.length; i++) {
@@ -267,25 +268,27 @@ export class VoiceService {
         if (i === event.results.length - 1) {
           isFinal = res.isFinal;
         }
+        for (let a = 0; a < res.length; a++) {
+          const altText = res[a]?.transcript?.trim();
+          if (altText) allAlternatives.push(altText);
+        }
       }
 
-      // 2. Current interim chunk
+      // 2. Current interim chunk (use best alternative)
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const res = event.results[i];
         if (!res) continue;
-        for (let alt = 0; alt < res.length; alt++) {
-          const piece = res[alt]?.transcript || '';
-          if (piece) {
-            currentChunk += ' ' + piece;
-          }
+        const piece = res[0]?.transcript || '';
+        if (piece) {
+          currentChunk += ' ' + piece;
         }
       }
 
       const cleanChunk = currentChunk.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
       const cleanFull = cumulativeTranscript.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
 
-      if (cleanChunk || cleanFull) {
-        config.onResult(cleanChunk || cleanFull, isFinal, cleanFull);
+      if (cleanChunk || cleanFull || allAlternatives.length > 0) {
+        config.onResult(cleanChunk || cleanFull, isFinal, cleanFull, allAlternatives);
       }
     };
 
@@ -464,20 +467,23 @@ export class VoiceService {
  */
 export const ALLOWED_4_TRIGGERS: Record<string, string[]> = {
   help: [
-    'help', 'help me', 'please help', 'help please', 'help emergency', 'help help', 'need help', 'i need help', 'helpp',
+    'help', 'help me', 'please help', 'help please', 'help emergency', 'help help', 'need help', 'i need help', 'helpp', 'save me', 'emergency', 'sos',
     'हेल्प', 'हेल्प मी', 'मदद', 'सहायता'
   ],
   bachao: [
-    'bachao', 'bacho', 'bachoo', 'bachaao', 'bachav', 'bachao bachao', 'bacho bacho', 'mujhe bachao', 'bachao mujhe',
+    'bachao', 'bacho', 'bachoo', 'bachaao', 'bachav', 'bachao bachao', 'bacho bacho', 'mujhe bachao', 'bachao mujhe', 'bchao', 'bachaho', 'bachaoji',
     'बचाओ', 'बचो', 'बचाव', 'बचाओ बचाओ', 'मुझे बचाओ', 'बचाओ मुझे'
   ],
   suraksha: [
-    'suraksha', 'suraksh', 'suraksha karo', 'meri suraksha', 'surakshaa',
+    'suraksha', 'suraksh', 'suraksha karo', 'meri suraksha', 'surakshaa', 'surksha', 'surakhsha', 'suraksha app', 'surakhsa',
     'सुरक्षा', 'सुरक्ष', 'सुरक्षा करो'
   ],
   'madad karo': [
-    'madad karo', 'madad', 'madat', 'madat karo', 'meri madad karo', 'madad kijiye', 'madad chahiye',
-    'मदद करो', 'मदद', 'मदद कीजिये', 'मेरी मदद करो', 'मदद चाहिए'
+    'madad karo', 'madad', 'madat', 'madat karo', 'meri madad karo', 'madad kijiye', 'madad chahiye', 'madadh', 'maddat', 'sahayata', 'sahayata karo',
+    'मदद करो', 'मदद', 'मदद कीजिये', 'मेरी मदद करो', 'मदद चाहिए', 'सहायता करो'
+  ],
+  four: [
+    'four', '4', 'for', 'four four', '4 4', 'char', 'chaar', 'number 4', 'number four', 'trigger 4', 'trigger four', '४', 'चार'
   ],
 };
 
@@ -500,70 +506,81 @@ function matchesExactWordOrPhrase(text: string, phrase: string): boolean {
 
 /**
  * High-accuracy multi-lingual trigger matcher
- * Strictly allows ONLY the 4 keywords (plus user-configured secret word).
- * Prevents false positives from words like "hello", "helmet", "holder".
+ * Strictly matches the 4 emergency triggers + synonyms + custom secret word.
  */
 export const triggerWordMatcher = {
-  isValidLength: (transcript: string, minLength: number = 2): boolean => {
+  isValidLength: (transcript: string, minLength: number = 1): boolean => {
     return transcript.trim().length >= minLength;
   },
 
-  findMatch: (transcript: string, customSecretTriggers: string[] = []): string | null => {
-    if (!transcript) return null;
+  findMatch: (
+    transcript: string | string[],
+    customSecretTriggers: string[] = []
+  ): string | null => {
+    const rawList = Array.isArray(transcript) ? transcript : [transcript];
+    const inputs: string[] = [];
 
-    const normalized = transcript
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (!normalized || normalized.length < 2) return null;
-
-    // Explicit check against conversational non-emergency words that start with 'hel'
-    const words = normalized.split(/\s+/);
-    const hasOnlyHello = words.every((w) => w === 'hello' || w === 'hey' || w === 'hi' || w === 'hola');
-    if (hasOnlyHello) {
-      return null;
+    for (const item of rawList) {
+      if (!item || typeof item !== 'string') continue;
+      const normalized = item
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (normalized) inputs.push(normalized);
     }
 
-    // 1. Check the 4 Core Triggers
-    // Trigger 1: HELP
-    for (const alias of ALLOWED_4_TRIGGERS.help) {
-      if (matchesExactWordOrPhrase(normalized, alias)) {
-        return 'help';
+    if (inputs.length === 0) return null;
+
+    for (const text of inputs) {
+      const words = text.split(/\s+/).filter(Boolean);
+      if (words.length === 0) continue;
+
+      // Filter out pure casual greetings if no emergency word is present
+      const isPureGreeting = words.every((w) => ['hello', 'hey', 'hi', 'hola'].includes(w));
+      if (isPureGreeting) continue;
+
+      // 1. Check all standard triggers (phrase matching & word boundaries)
+      for (const [category, aliases] of Object.entries(ALLOWED_4_TRIGGERS)) {
+        for (const alias of aliases) {
+          if (matchesExactWordOrPhrase(text, alias)) {
+            return category === 'four' ? 'madad karo' : category;
+          }
+        }
       }
-    }
 
-    // Trigger 2: BACHAO / BACHO
-    for (const alias of ALLOWED_4_TRIGGERS.bachao) {
-      if (matchesExactWordOrPhrase(normalized, alias)) {
-        return 'bachao';
+      // 2. Token-level matching (individual word match)
+      for (const w of words) {
+        for (const [category, aliases] of Object.entries(ALLOWED_4_TRIGGERS)) {
+          if (aliases.includes(w)) {
+            return category === 'four' ? 'madad karo' : category;
+          }
+        }
       }
-    }
 
-    // Trigger 3: SURAKSHA
-    for (const alias of ALLOWED_4_TRIGGERS.suraksha) {
-      if (matchesExactWordOrPhrase(normalized, alias)) {
-        return 'suraksha';
+      // 3. Substring matching for keywords with length >= 3
+      for (const [category, aliases] of Object.entries(ALLOWED_4_TRIGGERS)) {
+        for (const alias of aliases) {
+          if (alias.length >= 3 && text.includes(alias)) {
+            if (alias === 'help' && text.includes('hello')) {
+              const nonHello = text.replace(/hello/g, '').trim();
+              if (nonHello.includes('help')) {
+                return 'help';
+              }
+            } else {
+              return category === 'four' ? 'madad karo' : category;
+            }
+          }
+        }
       }
-    }
 
-    // Trigger 4: MADAD KARO / MADAD
-    for (const alias of ALLOWED_4_TRIGGERS['madad karo']) {
-      if (matchesExactWordOrPhrase(normalized, alias)) {
-        return 'madad karo';
-      }
-    }
-
-    // 2. Check Custom User Secret Word if configured
-    for (const custom of customSecretTriggers) {
-      const c = custom?.toLowerCase().trim();
-      if (!c) continue;
-      // Skip if custom is one of standard triggers already checked
-      if (['help', 'bachao', 'suraksha', 'madad karo', 'madad', 'bacho'].includes(c)) continue;
-
-      if (matchesExactWordOrPhrase(normalized, c)) {
-        return custom;
+      // 4. Custom Secret Word
+      for (const custom of customSecretTriggers) {
+        const c = custom?.toLowerCase().trim();
+        if (!c || c.length < 2) continue;
+        if (text.includes(c) || words.includes(c) || matchesExactWordOrPhrase(text, c)) {
+          return custom;
+        }
       }
     }
 
