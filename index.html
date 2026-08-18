@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JanSuraksha AI</title>
+  </head>
+  <body class="fs-unmask-airo-app-builder">
+    <div id="app" class="fs-unmask-airo-app-builder"></div>
+    <script type="module">
+      import('/src/main.tsx').catch(err => {
+        window.dispatchEvent(new CustomEvent('vite:initial-error', { detail: err }));
+      })
+    </script>
+    <script src="/analytics.js"></script>
+  </body>
+</html>
