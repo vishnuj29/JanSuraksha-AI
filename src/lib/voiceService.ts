@@ -2,14 +2,15 @@
 
 /**
  * Enterprise Multi-Lingual Voice Recognition & Audio Engine for JanSuraksha AI
+ * Built with robust support for Mobile Devices (Android Chrome, iOS Safari)
+ * and Integrated Laptop Microphones (Realtek, Intel Smart Sound, Apple Audio).
+ * 
  * Strictly restricted to 4 emergency triggers:
  * 1. "Help"
  * 2. "Bachao" / "Bacho"
  * 3. "Suraksha"
  * 4. "Madad Karo" / "Madad"
  * (Plus optional custom secret word)
- * 
- * Uses exact word-boundary matching to prevent false positives (e.g., "hello" will NEVER trigger).
  */
 
 export interface VoiceServiceConfig {
@@ -23,11 +24,20 @@ export interface VoiceServiceConfig {
   onAudioStart?: () => void;
 }
 
+export interface SpeechDiagnostics {
+  isSupported: boolean;
+  isSecureContext: boolean;
+  isMobile: boolean;
+  browserName: string;
+  hasMediaDevices: boolean;
+}
+
 export class VoiceService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private recognition: any = null;
   private isSupported = false;
   private isListening = false;
+  private isStarting = false;
   private shouldRestart = false;
   private restartTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
   private currentConfig: VoiceServiceConfig | null = null;
@@ -36,6 +46,7 @@ export class VoiceService {
   private micStream: MediaStream | null = null;
   private volumeInterval: ReturnType<typeof globalThis.setInterval> | null = null;
   private selectedDeviceId: string | null = null;
+  private consecutiveErrors = 0;
 
   constructor() {
     const SpeechRecognitionConstructor =
@@ -44,13 +55,61 @@ export class VoiceService {
       ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
     if (SpeechRecognitionConstructor) {
-      this.recognition = new SpeechRecognitionConstructor();
-      this.isSupported = true;
+      try {
+        this.recognition = new SpeechRecognitionConstructor();
+        this.isSupported = true;
+      } catch (e) {
+        console.warn('[VoiceService] Failed to construct SpeechRecognition:', e);
+        this.isSupported = false;
+      }
     }
   }
 
   isVoiceAPISupported(): boolean {
     return this.isSupported;
+  }
+
+  /**
+   * Diagnostic details for environment & browser capabilities
+   */
+  getDiagnostics(): SpeechDiagnostics {
+    const isClient = typeof window !== 'undefined';
+    const ua = isClient ? navigator.userAgent : '';
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    const isSecureContext = isClient ? window.isSecureContext ?? (window.location.protocol === 'https:' || window.location.hostname === 'localhost') : false;
+    const hasMediaDevices = isClient ? !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) : false;
+
+    let browserName = 'Unknown Browser';
+    if (/Edg/i.test(ua)) browserName = 'Microsoft Edge';
+    else if (/Chrome/i.test(ua)) browserName = 'Google Chrome';
+    else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browserName = 'Apple Safari';
+    else if (/Firefox/i.test(ua)) browserName = 'Mozilla Firefox';
+
+    return {
+      isSupported: this.isSupported,
+      isSecureContext,
+      isMobile,
+      browserName,
+      hasMediaDevices,
+    };
+  }
+
+  /**
+   * Safe microphone permission request and device discovery
+   */
+  async requestMicrophonePermission(): Promise<boolean> {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      return false;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Release test stream immediately
+      stream.getTracks().forEach((track) => track.stop());
+      return true;
+    } catch (err) {
+      console.warn('[VoiceService] Microphone permission request error:', err);
+      return false;
+    }
   }
 
   /**
@@ -62,7 +121,10 @@ export class VoiceService {
     }
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      return devices.filter((d) => d.kind === 'audioinput');
+      const audioInputs = devices.filter((d) => d.kind === 'audioinput');
+      // Filter unique device IDs
+      const unique = audioInputs.filter((d, idx, arr) => arr.findIndex((x) => x.deviceId === d.deviceId) === idx);
+      return unique;
     } catch {
       return [];
     }
@@ -72,11 +134,12 @@ export class VoiceService {
    * Set specific microphone device ID
    */
   setDeviceId(deviceId: string): void {
-    this.selectedDeviceId = deviceId;
+    this.selectedDeviceId = deviceId || null;
   }
 
   /**
-   * Start Web Audio API Volume Monitoring with AudioContext.resume() and RMS calculation
+   * Start Web Audio API Volume Monitoring with AudioContext.resume() and RMS calculation.
+   * Resilient to mobile hardware limitations and non-blocking for speech recognition.
    */
   async startAudioMeter(onVolume: (vol: number) => void): Promise<boolean> {
     try {
@@ -86,10 +149,11 @@ export class VoiceService {
 
       this.stopAudioMeter();
 
-      const constraints: MediaStreamConstraints = {
-        audio: this.selectedDeviceId
+      // Build non-conflicting constraints
+      const audioConstraint: boolean | MediaTrackConstraints =
+        this.selectedDeviceId && this.selectedDeviceId !== 'default' && this.selectedDeviceId !== ''
           ? {
-              deviceId: { exact: this.selectedDeviceId },
+              deviceId: { ideal: this.selectedDeviceId },
               echoCancellation: true,
               noiseSuppression: true,
               autoGainControl: true,
@@ -98,25 +162,31 @@ export class VoiceService {
               echoCancellation: true,
               noiseSuppression: true,
               autoGainControl: true,
-            },
+            };
+
+      const constraints: MediaStreamConstraints = {
+        audio: audioConstraint,
       };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       this.micStream = stream;
 
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return true;
 
       this.audioContext = new AudioCtx();
-      
+
       // Resume AudioContext for browser autoplay policy
       if (this.audioContext.state === 'suspended') {
-        await this.audioContext.resume();
+        try {
+          await this.audioContext.resume();
+        } catch {}
       }
 
       const source = this.audioContext.createMediaStreamSource(stream);
       this.analyser = this.audioContext.createAnalyser();
-      this.analyser.fftSize = 512;
+      this.analyser.fftSize = 256;
       this.analyser.smoothingTimeConstant = 0.3;
       source.connect(this.analyser);
 
@@ -136,11 +206,11 @@ export class VoiceService {
         const rms = Math.sqrt(sumSquares / bufferLength);
         const volume = Math.min(100, Math.round(rms * 350));
         onVolume(volume);
-      }, 60);
+      }, 70);
 
       return true;
     } catch (err) {
-      console.warn('[VoiceService] Audio meter error:', err);
+      console.warn('[VoiceService] Audio meter notice (speech recognition will still work):', err);
       return false;
     }
   }
@@ -151,7 +221,11 @@ export class VoiceService {
       this.volumeInterval = null;
     }
     if (this.micStream) {
-      this.micStream.getTracks().forEach((track) => track.stop());
+      this.micStream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {}
+      });
       this.micStream = null;
     }
     if (this.audioContext && this.audioContext.state !== 'closed') {
@@ -179,6 +253,7 @@ export class VoiceService {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.recognition.onresult = (event: any) => {
+      this.consecutiveErrors = 0;
       let cumulativeTranscript = '';
       let currentChunk = '';
       let isFinal = false;
@@ -215,7 +290,7 @@ export class VoiceService {
     };
 
     this.recognition.onaudiostart = () => {
-      console.log('[VoiceService] 🎙️ Speech recognition audio start');
+      console.log('[VoiceService] 🎙️ Speech recognition audio started');
       if (config.onAudioStart) config.onAudioStart();
     };
 
@@ -225,13 +300,27 @@ export class VoiceService {
       console.warn('[VoiceService] Speech Recognition Event:', err);
 
       if (err === 'no-speech' || err === 'aborted') {
+        // Normal silence event on mobile devices; auto-reconnect handled via onend
         return;
       }
 
-      if (err === 'not-allowed') {
+      if (err === 'not-allowed' || err === 'service-not-allowed') {
         this.shouldRestart = false;
         this.isListening = false;
-        config.onError('Microphone permission denied. Please allow microphone access in your browser.');
+        this.isStarting = false;
+        config.onError('Microphone access denied. Please click the lock or camera/mic icon in your browser address bar to allow microphone permission.');
+        return;
+      }
+
+      if (err === 'audio-capture') {
+        config.onError('Microphone audio capture busy. Re-initializing microphone...');
+        this.consecutiveErrors++;
+        return;
+      }
+
+      if (err === 'network') {
+        config.onError('Speech service network issue. Reconnecting...');
+        this.consecutiveErrors++;
         return;
       }
 
@@ -240,60 +329,104 @@ export class VoiceService {
 
     this.recognition.onstart = () => {
       this.isListening = true;
+      this.isStarting = false;
+      this.consecutiveErrors = 0;
       console.log('[VoiceService] 🔊 Speech recognition listening active');
       if (config.onStart) config.onStart();
     };
 
     this.recognition.onend = () => {
+      this.isListening = false;
+      this.isStarting = false;
       console.log('[VoiceService] 🛑 Session cycle finished. ShouldRestart:', this.shouldRestart);
 
       if (config.onEnd) config.onEnd();
 
       if (this.shouldRestart) {
-        if (this.restartTimeout) globalThis.clearTimeout(this.restartTimeout);
-        this.restartTimeout = globalThis.setTimeout(() => {
-          if (this.shouldRestart) {
-            try {
-              this.recognition.start();
-              console.log('[VoiceService] 🔄 Auto-reconnected speech recognition');
-            } catch (e) {
-              console.warn('[VoiceService] Reconnection notice:', e);
-            }
-          }
-        }, 150);
-      } else {
-        this.isListening = false;
+        this.scheduleRestart();
       }
     };
   }
 
+  /**
+   * Update configuration callbacks dynamically without destroying recognition
+   */
+  updateConfig(config: Partial<VoiceServiceConfig>): void {
+    if (this.currentConfig) {
+      this.currentConfig = { ...this.currentConfig, ...config };
+      if (config.lang && this.recognition) {
+        this.recognition.lang = config.lang;
+      }
+    }
+  }
+
+  private scheduleRestart(delayMs: number = 300): void {
+    if (this.restartTimeout) {
+      globalThis.clearTimeout(this.restartTimeout);
+      this.restartTimeout = null;
+    }
+
+    // Exponential backoff if consecutive errors occur
+    const backoff = Math.min(3000, delayMs + this.consecutiveErrors * 400);
+
+    this.restartTimeout = globalThis.setTimeout(() => {
+      if (this.shouldRestart && !this.isListening && !this.isStarting) {
+        try {
+          this.isStarting = true;
+          this.recognition.start();
+          console.log('[VoiceService] 🔄 Auto-reconnected speech recognition');
+        } catch (e) {
+          this.isStarting = false;
+          console.warn('[VoiceService] Reconnection notice:', e);
+          if (this.shouldRestart) {
+            this.scheduleRestart(800);
+          }
+        }
+      }
+    }, backoff);
+  }
+
   setLanguage(lang: string): void {
     if (this.recognition) {
-      const wasListening = this.isListening;
-      this.stop();
       this.recognition.lang = lang;
-      if (wasListening) {
-        this.start();
+      if (this.currentConfig) {
+        this.currentConfig.lang = lang;
+      }
+      if (this.isListening) {
+        // Soft restart to apply new language
+        try {
+          this.recognition.stop();
+        } catch {}
       }
     }
   }
 
   start(): void {
     if (!this.recognition) {
-      throw new Error('Voice service not initialized');
+      throw new Error('Speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
     }
     this.shouldRestart = true;
-    this.isListening = true;
+    this.consecutiveErrors = 0;
+
+    if (this.isListening || this.isStarting) {
+      return;
+    }
+
     try {
+      this.isStarting = true;
       this.recognition.start();
     } catch (e) {
+      this.isStarting = false;
       console.warn('[VoiceService] Start notice:', e);
+      // If already started or transitioning, retry safely
+      this.scheduleRestart(400);
     }
   }
 
   stop(): void {
     this.shouldRestart = false;
     this.isListening = false;
+    this.isStarting = false;
     if (this.restartTimeout) {
       globalThis.clearTimeout(this.restartTimeout);
       this.restartTimeout = null;
@@ -308,6 +441,7 @@ export class VoiceService {
   abort(): void {
     this.shouldRestart = false;
     this.isListening = false;
+    this.isStarting = false;
     if (this.restartTimeout) {
       globalThis.clearTimeout(this.restartTimeout);
       this.restartTimeout = null;
@@ -330,19 +464,19 @@ export class VoiceService {
  */
 export const ALLOWED_4_TRIGGERS: Record<string, string[]> = {
   help: [
-    'help', 'help me', 'please help', 'help please', 'help emergency', 'help help', 'need help', 'i need help',
-    'हेल्प', 'हेल्प मी'
+    'help', 'help me', 'please help', 'help please', 'help emergency', 'help help', 'need help', 'i need help', 'helpp',
+    'हेल्प', 'हेल्प मी', 'मदद', 'सहायता'
   ],
   bachao: [
-    'bachao', 'bacho', 'bachoo', 'bachaao', 'bachao bachao', 'bacho bacho', 'mujhe bachao', 'bachao mujhe',
+    'bachao', 'bacho', 'bachoo', 'bachaao', 'bachav', 'bachao bachao', 'bacho bacho', 'mujhe bachao', 'bachao mujhe',
     'बचाओ', 'बचो', 'बचाव', 'बचाओ बचाओ', 'मुझे बचाओ', 'बचाओ मुझे'
   ],
   suraksha: [
-    'suraksha', 'suraksh', 'suraksha karo', 'meri suraksha',
+    'suraksha', 'suraksh', 'suraksha karo', 'meri suraksha', 'surakshaa',
     'सुरक्षा', 'सुरक्ष', 'सुरक्षा करो'
   ],
   'madad karo': [
-    'madad karo', 'madad', 'meri madad karo', 'madad kijiye', 'madad chahiye', 'madat karo',
+    'madad karo', 'madad', 'madat', 'madat karo', 'meri madad karo', 'madad kijiye', 'madad chahiye',
     'मदद करो', 'मदद', 'मदद कीजिये', 'मेरी मदद करो', 'मदद चाहिए'
   ],
 };
@@ -423,7 +557,7 @@ export const triggerWordMatcher = {
 
     // 2. Check Custom User Secret Word if configured
     for (const custom of customSecretTriggers) {
-      const c = custom.toLowerCase().trim();
+      const c = custom?.toLowerCase().trim();
       if (!c) continue;
       // Skip if custom is one of standard triggers already checked
       if (['help', 'bachao', 'suraksha', 'madad karo', 'madad', 'bacho'].includes(c)) continue;
@@ -436,3 +570,4 @@ export const triggerWordMatcher = {
     return null;
   },
 };
+

@@ -4,8 +4,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mic, Shield, AlertTriangle, CheckCircle, Settings, Eye, EyeOff, Save, Zap, Volume2, Globe, Activity, Sliders } from 'lucide-react';
-import { VoiceService, triggerWordMatcher } from '../lib/voiceService';
+import { Mic, Shield, AlertTriangle, CheckCircle, Settings, Eye, EyeOff, Save, Zap, Volume2, Globe, Activity, Sliders, Smartphone, Laptop, Lock } from 'lucide-react';
+import { VoiceService, triggerWordMatcher, SpeechDiagnostics } from '../lib/voiceService';
 import { sendSOSEmergency } from '../lib/sosService';
 import { api } from '../lib/api-client';
 import { toast } from 'sonner';
@@ -28,38 +28,52 @@ export default function VoicePage() {
   const [lastTranscript, setLastTranscript] = useState('');
   const [transcriptLog, setTranscriptLog] = useState<string[]>([]);
   const [matchedTrigger, setMatchedTrigger] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<SpeechDiagnostics | null>(null);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
 
   const voiceServiceRef = useRef<VoiceService | null>(null);
   const detectionTimeoutRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const triggeringRef = useRef(false);
-  const listeningRef = useRef(false);
+  const savedWordRef = useRef(savedWord);
+  savedWordRef.current = savedWord;
 
-  // Initialize Voice Service
+  // 1. Initialize Voice Service once on component mount
   useEffect(() => {
     const voiceService = new VoiceService();
+    voiceServiceRef.current = voiceService;
+
+    const diag = voiceService.getDiagnostics();
+    setDiagnostics(diag);
 
     if (!voiceService.isVoiceAPISupported()) {
-      setErrorMessage('Web Speech Recognition is not supported by your current browser. Please use Google Chrome or Microsoft Edge.');
+      setErrorMessage('Web Speech Recognition is not supported by your current browser. On Android or PC/Mac, please use Google Chrome or Microsoft Edge. On iPhone/iPad, please use Safari.');
       setVoiceState('error');
       return;
     }
 
-    voiceServiceRef.current = voiceService;
+    if (!diag.isSecureContext) {
+      toast.warning('Microphone features require HTTPS or localhost for browser security.');
+    }
 
-    // Discover audio input devices
-    voiceService.getAudioInputDevices().then((devs) => {
+    // Refresh devices list
+    const refreshDevices = async () => {
+      const devs = await voiceService.getAudioInputDevices();
       setDevices(devs);
-      if (devs.length > 0 && !selectedDevice) {
+      if (devs.length > 0 && devs[0].deviceId && !selectedDevice) {
         setSelectedDevice(devs[0].deviceId);
       }
-    });
+    };
+    refreshDevices();
 
+    // Setup speech recognition callbacks
     voiceService.initialize({
       lang: selectedLang,
       continuous: true,
       interimResults: true,
       onStart: () => {
-        console.log('[VoicePage] 🎙️ Speech recognition engine started');
+        console.log('[VoicePage] 🎙️ Speech recognition engine active');
+        setVoiceState('listening');
+        setErrorMessage('');
       },
       onResult: (transcript: string, isFinal: boolean, fullSessionTranscript: string) => {
         const displayText = transcript || fullSessionTranscript;
@@ -73,7 +87,7 @@ export default function VoicePage() {
 
         // Active triggers list
         const activeTriggers = Array.from(
-          new Set(['help', 'bachao', 'suraksha', 'madad karo', savedWord?.toLowerCase()].filter(Boolean))
+          new Set(['help', 'bachao', 'suraksha', 'madad karo', 'madad', savedWordRef.current?.toLowerCase()].filter(Boolean))
         );
 
         // Check both chunk and full utterance
@@ -109,8 +123,7 @@ export default function VoicePage() {
                 setVoiceState('idle');
                 setMatchedTrigger(null);
                 triggeringRef.current = false;
-                if (listeningRef.current && voiceServiceRef.current) {
-                  setVoiceState('listening');
+                if (voiceServiceRef.current) {
                   voiceServiceRef.current.start();
                 }
               }, 6000);
@@ -123,35 +136,41 @@ export default function VoicePage() {
         }
       },
       onError: (error: string) => {
-        console.error('[VoicePage] Voice Error:', error);
+        console.warn('[VoicePage] Voice Error:', error);
         if (error.includes('denied') || error.includes('permission')) {
-          listeningRef.current = false;
-          setErrorMessage('Microphone access was denied. Please click the padlock/microphone icon in your browser URL bar to allow access.');
+          setHasPermission(false);
+          setErrorMessage('Microphone access was denied. Please click the lock or camera/mic icon in your browser URL bar to allow microphone access.');
           setVoiceState('error');
+        } else if (error.includes('busy') || error.includes('reconnecting')) {
+          // Soft notification
+          toast.info(error);
         }
       },
       onEnd: () => {
-        console.log('[VoicePage] Speech recognition session cycle completed');
+        console.log('[VoicePage] Speech recognition cycle ended');
       },
     });
 
     return () => {
-      listeningRef.current = false;
-      voiceService.abort();
+      if (voiceServiceRef.current) {
+        voiceServiceRef.current.abort();
+      }
       if (detectionTimeoutRef.current) {
         globalThis.clearTimeout(detectionTimeoutRef.current);
       }
     };
-  }, [savedWord, selectedLang, selectedDevice]);
+  }, []);
 
-  // Audio wave animation dynamically driven by live mic volume
+  // Audio wave animation dynamically driven by live mic volume or active listening state
   useEffect(() => {
     let interval: ReturnType<typeof globalThis.setInterval> | undefined;
     if (voiceState === 'listening') {
       interval = globalThis.setInterval(() => {
-        const factor = micVolume > 3 ? micVolume / 65 : 0.2;
-        setWaveAmplitudes((prev) => prev.map(() => Math.min(1, factor * (0.35 + Math.random() * 0.8))));
-      }, 80);
+        const factor = micVolume > 2 ? micVolume / 55 : 0.25;
+        setWaveAmplitudes((prev) => prev.map(() => Math.min(1, factor * (0.4 + Math.random() * 0.75))));
+      }, 75);
+    } else {
+      setWaveAmplitudes([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]);
     }
     return () => {
       if (interval !== undefined) globalThis.clearInterval(interval);
@@ -175,8 +194,28 @@ export default function VoicePage() {
     if (voiceServiceRef.current) {
       voiceServiceRef.current.setDeviceId(devId);
       if (voiceState === 'listening') {
-        await voiceServiceRef.current.startAudioMeter(setMicVolume);
+        await voiceServiceRef.current.startAudioMeter((vol) => setMicVolume(vol));
       }
+    }
+  };
+
+  /**
+   * Request microphone permission explicitly & discover devices
+   */
+  const handleRequestPermission = async () => {
+    if (!voiceServiceRef.current) return;
+    const granted = await voiceServiceRef.current.requestMicrophonePermission();
+    setHasPermission(granted);
+    if (granted) {
+      toast.success('Microphone permission granted!');
+      setErrorMessage('');
+      const devs = await voiceServiceRef.current.getAudioInputDevices();
+      setDevices(devs);
+      if (devs.length > 0 && !selectedDevice) {
+        setSelectedDevice(devs[0].deviceId);
+      }
+    } else {
+      toast.error('Microphone permission denied. Please allow microphone access in browser settings.');
     }
   };
 
@@ -185,7 +224,7 @@ export default function VoicePage() {
    */
   const toggleListening = async () => {
     if (!voiceServiceRef.current) {
-      setErrorMessage('Speech recognition is not supported in this browser.');
+      setErrorMessage('Speech recognition is not supported in this browser. Please use Google Chrome, Edge, or Safari.');
       return;
     }
 
@@ -194,22 +233,28 @@ export default function VoicePage() {
         setErrorMessage('');
         setLastTranscript('');
 
-        // 1. Start live audio volume meter with AudioContext.resume()
-        const meterStarted = await voiceServiceRef.current.startAudioMeter((vol) => {
-          setMicVolume(vol);
-        });
-
-        if (!meterStarted) {
-          toast.warning('Microphone permission needed. Please click Allow.');
-        }
-
-        // 2. Start speech recognition engine
-        listeningRef.current = true;
+        // 1. Immediately start speech recognition (vital for iOS/Android touch event policies)
         setVoiceState('listening');
         voiceServiceRef.current.start();
-        toast.success('Microphone Live! Speak "Help", "Madad Karo", or "Bachao".');
+
+        // 2. Safe Audio volume meter with AudioContext (non-blocking)
+        voiceServiceRef.current
+          .startAudioMeter((vol) => {
+            setMicVolume(vol);
+          })
+          .then((started) => {
+            if (started) {
+              setHasPermission(true);
+            }
+          });
+
+        // 3. Discover device labels after permission
+        voiceServiceRef.current.getAudioInputDevices().then((devs) => {
+          if (devs.length > 0) setDevices(devs);
+        });
+
+        toast.success('Microphone Live! Speak "Help", "Madad Karo", "Bachao", or "Suraksha".');
       } else if (voiceState === 'listening') {
-        listeningRef.current = false;
         voiceServiceRef.current.stop();
         setMicVolume(0);
         setVoiceState('idle');
@@ -337,7 +382,7 @@ export default function VoicePage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: 'easeOut' as const }}
-            className="text-center mb-8 pt-4"
+            className="text-center mb-6 pt-4"
           >
             <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-full px-4 py-1.5 mb-4">
               <Mic size={12} className="text-blue-400" />
@@ -350,6 +395,44 @@ export default function VoicePage() {
               Speak <strong className="text-white">&quot;Help&quot;</strong>, <strong className="text-white">&quot;Madad Karo&quot;</strong>, <strong className="text-white">&quot;Bachao&quot;</strong>, or <strong className="text-white">&quot;Suraksha&quot;</strong> into your microphone to trigger instant SOS.
             </p>
           </motion.div>
+
+          {/* Device & Environment Compatibility Pill */}
+          {diagnostics && (
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-5 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                {diagnostics.isMobile ? (
+                  <span className="inline-flex items-center gap-1 text-blue-400 font-medium">
+                    <Smartphone size={13} /> Mobile Phone
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-blue-400 font-medium">
+                    <Laptop size={13} /> Integrated Laptop / PC Mic
+                  </span>
+                )}
+                <span>• {diagnostics.browserName}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {diagnostics.isSecureContext ? (
+                  <span className="inline-flex items-center gap-1 text-green-400">
+                    <Lock size={12} /> Secure HTTPS
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-yellow-400">
+                    <AlertTriangle size={12} /> Insecure Context
+                  </span>
+                )}
+                {hasPermission === false && (
+                  <button
+                    type="button"
+                    onClick={handleRequestPermission}
+                    className="text-xs text-blue-400 hover:text-blue-300 underline font-semibold cursor-pointer"
+                  >
+                    Grant Mic Permission
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Controls Bar: Language + Device Selector */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6 bg-white/5 border border-white/10 p-2.5 rounded-2xl">
@@ -394,9 +477,9 @@ export default function VoicePage() {
                   onChange={(e) => handleDeviceChange(e.target.value)}
                   className="bg-black/50 text-white text-xs border border-white/10 rounded-lg px-2 py-1 outline-none max-w-[180px] truncate"
                 >
-                  {devices.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Microphone ${d.deviceId.slice(0, 5)}`}
+                  {devices.map((d, index) => (
+                    <option key={d.deviceId || index} value={d.deviceId}>
+                      {d.label || `Microphone ${index + 1}`}
                     </option>
                   ))}
                 </select>
@@ -419,7 +502,7 @@ export default function VoicePage() {
                     key={i}
                     className={`w-1.5 rounded-full ${
                       voiceState === 'listening'
-                        ? micVolume > 10
+                        ? micVolume > 8
                           ? 'bg-green-400'
                           : 'bg-blue-400'
                         : voiceState === 'detected'
@@ -428,7 +511,7 @@ export default function VoicePage() {
                         ? 'bg-red-400'
                         : 'bg-slate-700'
                     }`}
-                    animate={{ height: voiceState === 'listening' ? `${amp * 50 + 10}px` : '8px' }}
+                    animate={{ height: voiceState === 'listening' ? `${Math.max(8, amp * 50 + 8)}px` : '8px' }}
                     transition={{ duration: 0.08, ease: 'easeOut' as const }}
                   />
                 ))}
@@ -436,10 +519,10 @@ export default function VoicePage() {
 
               {voiceState === 'listening' && (
                 <div className="flex items-center gap-2 bg-black/60 border border-white/15 px-3.5 py-1.5 rounded-full text-xs text-slate-300 shadow-md">
-                  <Activity size={13} className={micVolume > 5 ? 'text-green-400 animate-pulse' : 'text-slate-500'} />
+                  <Activity size={13} className={micVolume > 4 ? 'text-green-400 animate-pulse' : 'text-slate-500'} />
                   <span>
                     Microphone Input Level:{' '}
-                    <strong className={micVolume > 10 ? 'text-green-400 font-mono font-bold' : 'text-slate-300 font-mono'}>
+                    <strong className={micVolume > 8 ? 'text-green-400 font-mono font-bold' : 'text-slate-300 font-mono'}>
                       {micVolume}%
                     </strong>
                   </span>
@@ -448,7 +531,7 @@ export default function VoicePage() {
                       className={`h-full transition-all duration-75 ${
                         micVolume > 35 ? 'bg-red-500' : micVolume > 15 ? 'bg-green-400' : 'bg-blue-500'
                       }`}
-                      style={{ width: `${micVolume}%` }}
+                      style={{ width: `${Math.max(5, micVolume)}%` }}
                     />
                   </div>
                 </div>
@@ -546,14 +629,14 @@ export default function VoicePage() {
                     <span className="text-yellow-300">&quot;{lastTranscript}&quot;</span>
                   ) : (
                     <span className="text-slate-400 font-normal italic">
-                      Listening... Say &quot;Help&quot;, &quot;Madad Karo&quot;, or &quot;Bachao&quot;
+                      Listening... Say &quot;Help&quot;, &quot;Madad Karo&quot;, &quot;Suraksha&quot;, or &quot;Bachao&quot;
                     </span>
                   )}
                 </div>
 
                 {transcriptLog.length > 0 && (
                   <div className="w-full flex flex-col gap-1 mt-1 border-t border-white/10 pt-2">
-                    <span className="text-[10px] text-slate-500 font-semibold">Recent utterances:</span>
+                    <span className="text-[10px] text-slate-500 font-semibold">Recent utterances heard:</span>
                     {transcriptLog.map((log, idx) => (
                       <div key={idx} className="text-[11px] text-slate-400 font-mono truncate">
                         • &quot;{log}&quot;
@@ -697,3 +780,4 @@ export default function VoicePage() {
     </>
   );
 }
+
