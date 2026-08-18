@@ -112,16 +112,44 @@ export default async function handler(req: Request, res: Response) {
     // 1. Dispatch Twilio WhatsApp/SMS
     const alertId = await sendWhatsAppAlert(phone, fullMessage);
 
-    // 2. Dispatch SMTP Emergency Alert Email to configured emergency email contacts
-    const emergencyEmail = process.env.EMERGENCY_ALERT_EMAIL || 'admin@jansuraksha.ai';
-    emailService.sendSOSEmergencyEmail(emergencyEmail, {
-      userName,
-      phone,
-      locationUrl: locationMapUrl,
-      address: locationDisplay,
-      triggerWord,
-      timestamp: timeStr,
-    }).catch((err) => console.error('[SOS Email Dispatch Error]:', err));
+    // 2. Dispatch SMTP Emergency Alert Email to system admin & emergency email contacts
+    const emergencyRecipients: string[] = [];
+    if (process.env.SMTP_USER && process.env.SMTP_USER.includes('@')) {
+      emergencyRecipients.push(process.env.SMTP_USER);
+    }
+    if (process.env.EMERGENCY_ALERT_EMAIL && process.env.EMERGENCY_ALERT_EMAIL.includes('@')) {
+      emergencyRecipients.push(process.env.EMERGENCY_ALERT_EMAIL);
+    }
+
+    // Include registered user email if userId is available
+    if (userId) {
+      const userObj = dbStore.findUserById(userId);
+      if (userObj?.email && !emergencyRecipients.includes(userObj.email)) {
+        emergencyRecipients.push(userObj.email);
+      }
+      const contacts = dbStore.getContacts(userId);
+      for (const c of contacts) {
+        if (c.email && c.email.includes('@') && !emergencyRecipients.includes(c.email)) {
+          emergencyRecipients.push(c.email);
+        }
+      }
+    }
+
+    if (emergencyRecipients.length > 0) {
+      emailService
+        .sendSOSEmergencyEmail(emergencyRecipients, {
+          userName,
+          phone,
+          locationUrl: locationMapUrl,
+          address: locationDisplay,
+          triggerWord,
+          timestamp: timeStr,
+        })
+        .then((res) => {
+          console.log(`[SOS EMAIL DISPATCH] Sent to [${emergencyRecipients.join(', ')}]. Result:`, res);
+        })
+        .catch((err) => console.error('[SOS Email Dispatch Error]:', err));
+    }
 
     const responseTime = Date.now() - startTime;
     console.log(`[SOS ALERT DISPATCHED] ID: ${alertRecord.id} in ${responseTime}ms for ${userName}`);

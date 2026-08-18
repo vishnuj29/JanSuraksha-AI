@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import path from 'path';
 
+// Ensure .env is loaded in development & serverless environments
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 export interface EmailResult {
@@ -13,50 +14,81 @@ export interface EmailResult {
 
 class EmailService {
   private transporter: nodemailer.Transporter | null = null;
-  private isConfigured = false;
 
-  constructor() {
-    this.initTransporter();
-  }
+  /**
+   * Dynamically get or create SMTP Transporter using latest environment variables
+   */
+  private getTransporter(): nodemailer.Transporter | null {
+    if (this.transporter) {
+      return this.transporter;
+    }
 
-  private initTransporter() {
-    const host = process.env.SMTP_HOST;
+    // Refresh env if needed
+    if (!process.env.SMTP_USER) {
+      dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+    }
+
+    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
     const port = parseInt(process.env.SMTP_PORT || '587', 10);
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
-    const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+    const isGmail = host.includes('gmail.com') || (user && user.includes('gmail.com')) || (user && user.includes('glbitm.ac.in'));
 
-    if (host && user && pass) {
+    if (user && pass) {
       try {
-        this.transporter = nodemailer.createTransport({
-          host,
-          port,
-          secure,
-          auth: {
-            user,
-            pass,
-          },
-          tls: {
-            rejectUnauthorized: false,
-          },
-        });
-        this.isConfigured = true;
-        console.log(`[EmailService] SMTP Transporter configured for host: ${host}`);
+        if (isGmail) {
+          this.transporter = nodemailer.createTransport({
+            host: 'smtp.gmail.com',
+            port: 587,
+            secure: false, // TLS via STARTTLS
+            auth: {
+              user,
+              pass,
+            },
+            tls: {
+              rejectUnauthorized: false,
+            },
+          });
+        } else {
+          this.transporter = nodemailer.createTransport({
+            host,
+            port,
+            secure: port === 465,
+            auth: {
+              user,
+              pass,
+            },
+            tls: {
+              rejectUnauthorized: false,
+            },
+          });
+        }
+        console.log(`[EmailService] 📧 SMTP Transporter created successfully for: ${user} (${host}:${port})`);
+        return this.transporter;
       } catch (err) {
-        console.error('[EmailService] Failed to initialize SMTP transporter:', err);
-        this.isConfigured = false;
+        console.error('[EmailService] Failed to create SMTP transporter:', err);
+        return null;
       }
-    } else {
-      console.log('[EmailService] SMTP credentials not fully configured in environment. Using dev logger fallback.');
-      this.isConfigured = false;
     }
+
+    console.warn('[EmailService] SMTP credentials not set. Falling back to dev logger.');
+    return null;
+  }
+
+  private getFromAddress(): string {
+    const user = process.env.SMTP_USER || 'security@jansuraksha.ai';
+    const configuredFrom = process.env.SMTP_FROM;
+    if (configuredFrom && configuredFrom.includes('@')) {
+      return configuredFrom.replace(/^"+|"+$/g, '');
+    }
+    return `"JanSuraksha AI Security" <${user}>`;
   }
 
   /**
    * Send 6-digit Login OTP Email via SMTP
    */
   public async sendLoginOtpEmail(toEmail: string, otp: string, userName?: string): Promise<EmailResult> {
-    const fromAddress = process.env.SMTP_FROM || 'JanSuraksha AI Security <security@jansuraksha.ai>';
+    const fromAddress = this.getFromAddress();
     const name = userName || 'JanSuraksha User';
     const timestamp = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
@@ -108,9 +140,10 @@ class EmailService {
     </html>
     `;
 
-    if (this.transporter && this.isConfigured) {
+    const transporter = this.getTransporter();
+    if (transporter) {
       try {
-        const info = await this.transporter.sendMail({
+        const info = await transporter.sendMail({
           from: fromAddress,
           to: toEmail,
           subject: `🔐 JanSuraksha AI — Login Verification Code: ${otp}`,
@@ -118,15 +151,14 @@ class EmailService {
           html: htmlContent,
         });
 
-        console.log(`[EmailService] Login OTP sent to ${toEmail}. Message ID: ${info.messageId}`);
+        console.log(`[EmailService] ✅ Login OTP sent successfully to ${toEmail}. Message ID: ${info.messageId}`);
         return { success: true, messageId: info.messageId };
       } catch (err) {
-        console.error(`[EmailService] Failed to send email via SMTP to ${toEmail}:`, err);
-        // Fall back to console logger
+        console.error(`[EmailService] ❌ Failed to send email via SMTP to ${toEmail}:`, err);
       }
     }
 
-    // Dev/Fallback logger
+    // Fallback logger
     console.log('\n================== 📧 SMTP DEV EMAIL DISPATCH 📧 ==================');
     console.log(`To: ${toEmail}`);
     console.log(`Subject: 🔐 JanSuraksha AI — Login Verification Code: ${otp}`);
@@ -144,7 +176,7 @@ class EmailService {
    * Send 6-digit Registration Verification OTP Email via SMTP
    */
   public async sendRegistrationOtpEmail(toEmail: string, otp: string, userName?: string): Promise<EmailResult> {
-    const fromAddress = process.env.SMTP_FROM || 'JanSuraksha AI Security <security@jansuraksha.ai>';
+    const fromAddress = this.getFromAddress();
     const name = userName || 'JanSuraksha User';
     const timestamp = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
@@ -196,9 +228,10 @@ class EmailService {
     </html>
     `;
 
-    if (this.transporter && this.isConfigured) {
+    const transporter = this.getTransporter();
+    if (transporter) {
       try {
-        const info = await this.transporter.sendMail({
+        const info = await transporter.sendMail({
           from: fromAddress,
           to: toEmail,
           subject: `🔐 JanSuraksha AI — Verify Your Email: ${otp}`,
@@ -206,10 +239,10 @@ class EmailService {
           html: htmlContent,
         });
 
-        console.log(`[EmailService] Registration OTP sent to ${toEmail}. Message ID: ${info.messageId}`);
+        console.log(`[EmailService] ✅ Registration OTP sent to ${toEmail}. Message ID: ${info.messageId}`);
         return { success: true, messageId: info.messageId };
       } catch (err) {
-        console.error(`[EmailService] Failed to send registration email via SMTP to ${toEmail}:`, err);
+        console.error(`[EmailService] ❌ Failed to send registration email via SMTP to ${toEmail}:`, err);
       }
     }
 
@@ -231,7 +264,7 @@ class EmailService {
    * Send Welcome / Registration Confirmation Email
    */
   public async sendWelcomeEmail(toEmail: string, userName: string): Promise<EmailResult> {
-    const fromAddress = process.env.SMTP_FROM || 'JanSuraksha AI <welcome@jansuraksha.ai>';
+    const fromAddress = this.getFromAddress();
 
     const htmlContent = `
     <!DOCTYPE html>
@@ -281,18 +314,20 @@ class EmailService {
     </html>
     `;
 
-    if (this.transporter && this.isConfigured) {
+    const transporter = this.getTransporter();
+    if (transporter) {
       try {
-        const info = await this.transporter.sendMail({
+        const info = await transporter.sendMail({
           from: fromAddress,
           to: toEmail,
           subject: '🛡️ Welcome to JanSuraksha AI — Your Account is Ready',
           text: `Welcome to JanSuraksha AI, ${userName}! Your account is active. Stay protected 24/7.`,
           html: htmlContent,
         });
+        console.log(`[EmailService] ✅ Welcome email sent to ${toEmail}. Message ID: ${info.messageId}`);
         return { success: true, messageId: info.messageId };
       } catch (err) {
-        console.error('[EmailService] Failed to send welcome email:', err);
+        console.error('[EmailService] ❌ Failed to send welcome email:', err);
       }
     }
 
@@ -301,17 +336,27 @@ class EmailService {
   }
 
   /**
-   * Send SOS Alert Notification Email
+   * Send SOS Alert Notification Email (supports single recipient or list of recipients)
    */
-  public async sendSOSEmergencyEmail(toEmail: string, alertData: {
-    userName: string;
-    phone: string;
-    locationUrl?: string;
-    address?: string;
-    triggerWord?: string;
-    timestamp?: string;
-  }): Promise<EmailResult> {
-    const fromAddress = process.env.SMTP_FROM || 'JanSuraksha AI Emergency <sos@jansuraksha.ai>';
+  public async sendSOSEmergencyEmail(
+    toEmail: string | string[],
+    alertData: {
+      userName: string;
+      phone: string;
+      locationUrl?: string;
+      address?: string;
+      triggerWord?: string;
+      timestamp?: string;
+    }
+  ): Promise<EmailResult> {
+    const fromAddress = this.getFromAddress();
+    const recipients = Array.isArray(toEmail) ? toEmail : [toEmail];
+    const validRecipients = recipients.filter((e) => e && typeof e === 'string' && e.includes('@'));
+
+    if (validRecipients.length === 0) {
+      console.warn('[EmailService] No valid recipient email addresses for SOS alert.');
+      return { success: false, error: 'No valid email recipients' };
+    }
 
     const htmlContent = `
     <!DOCTYPE html>
@@ -319,44 +364,58 @@ class EmailService {
     <head>
       <meta charset="utf-8">
       <style>
-        body { font-family: sans-serif; background-color: #450a0a; color: #ffffff; padding: 20px; }
-        .container { max-width: 560px; margin: 0 auto; background: #7f1d1d; border: 2px solid #ef4444; border-radius: 16px; padding: 24px; }
-        .title { font-size: 26px; font-weight: 900; color: #ffffff; text-align: center; }
-        .alert-box { background: #991b1b; padding: 16px; border-radius: 12px; margin: 20px 0; }
-        .btn { display: inline-block; background: #ffffff; color: #991b1b; font-weight: bold; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 15px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #450a0a; color: #ffffff; padding: 20px; margin: 0; }
+        .container { max-width: 580px; margin: 0 auto; background: #7f1d1d; border: 2px solid #ef4444; border-radius: 16px; padding: 28px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .title { font-size: 26px; font-weight: 900; color: #ffffff; text-align: center; letter-spacing: -0.5px; }
+        .alert-box { background: #991b1b; padding: 20px; border-radius: 12px; margin: 20px 0; border: 1px solid rgba(255,255,255,0.2); }
+        .alert-row { font-size: 15px; margin: 8px 0; color: #fee2e2; }
+        .alert-row strong { color: #ffffff; }
+        .btn { display: inline-block; background: #ffffff; color: #991b1b; font-weight: 800; padding: 14px 28px; border-radius: 10px; text-decoration: none; margin-top: 18px; font-size: 15px; text-align: center; }
+        .footer { font-size: 11px; color: #fca5a5; text-align: center; margin-top: 20px; }
       </style>
     </head>
     <body>
       <div class="container">
-        <div class="title">🚨 EMERGENCY SOS ALERT</div>
+        <div class="title">🚨 EMERGENCY DISTRESS ALERT</div>
         <div class="alert-box">
-          <p><strong>User:</strong> ${alertData.userName}</p>
-          <p><strong>Contact:</strong> ${alertData.phone}</p>
-          <p><strong>Trigger:</strong> ${alertData.triggerWord || 'Manual SOS'}</p>
-          <p><strong>Time:</strong> ${alertData.timestamp || new Date().toLocaleString()}</p>
-          ${alertData.address ? `<p><strong>Location:</strong> ${alertData.address}</p>` : ''}
-          ${alertData.locationUrl ? `<a href="${alertData.locationUrl}" class="btn" target="_blank">📍 View Live GPS Location</a>` : ''}
+          <div class="alert-row"><strong>👤 User:</strong> ${alertData.userName}</div>
+          <div class="alert-row"><strong>📞 Contact Number:</strong> ${alertData.phone}</div>
+          <div class="alert-row"><strong>🎙️ Distress Trigger:</strong> ${alertData.triggerWord || 'Voice / Manual SOS'}</div>
+          <div class="alert-row"><strong>⏱️ Time:</strong> ${alertData.timestamp || new Date().toLocaleString('en-IN')} (IST)</div>
+          ${alertData.address ? `<div class="alert-row"><strong>📍 Detected Location:</strong> ${alertData.address}</div>` : ''}
+          ${
+            alertData.locationUrl
+              ? `<div style="text-align: center;"><a href="${alertData.locationUrl}" class="btn" target="_blank">📍 View Live GPS Location On Map</a></div>`
+              : ''
+          }
+        </div>
+        <div class="footer">
+          JanSuraksha AI Automated Emergency Response System. Please reach out to this person immediately.
         </div>
       </div>
     </body>
     </html>
     `;
 
-    if (this.transporter && this.isConfigured) {
+    const transporter = this.getTransporter();
+    if (transporter) {
       try {
-        const info = await this.transporter.sendMail({
+        const info = await transporter.sendMail({
           from: fromAddress,
-          to: toEmail,
-          subject: `🚨 CRITICAL EMERGENCY ALERT from ${alertData.userName}`,
+          to: validRecipients.join(', '),
+          subject: `🚨 CRITICAL EMERGENCY ALERT from ${alertData.userName} (${alertData.triggerWord || 'SOS'})`,
+          text: `CRITICAL EMERGENCY ALERT: ${alertData.userName} (${alertData.phone}) activated an SOS distress alert at ${alertData.timestamp || new Date().toLocaleString()}. Location: ${alertData.address || 'Unknown'}. Live Map: ${alertData.locationUrl || 'N/A'}`,
           html: htmlContent,
         });
+        console.log(`[EmailService] ✅ Emergency SOS email successfully delivered to [${validRecipients.join(', ')}]. Message ID: ${info.messageId}`);
         return { success: true, messageId: info.messageId };
       } catch (err) {
-        console.error('[EmailService] Failed to send SOS alert email:', err);
+        console.error(`[EmailService] ❌ Failed to send SOS alert email to [${validRecipients.join(', ')}]:`, err);
+        return { success: false, error: err instanceof Error ? err.message : 'SMTP dispatch failure' };
       }
     }
 
-    console.log(`[EmailService DEV] SOS Emergency notification email dispatched to: ${toEmail}`);
+    console.log(`[EmailService DEV] SOS Emergency notification email simulated for: ${validRecipients.join(', ')}`);
     return { success: true, mock: true, messageId: `DEV_SOS_${Date.now()}` };
   }
 }

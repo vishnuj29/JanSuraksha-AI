@@ -41,6 +41,7 @@ export class VoiceService {
   private shouldRestart = false;
   private restartTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
   private currentConfig: VoiceServiceConfig | null = null;
+  private currentLang = 'en-IN';
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private micStream: MediaStream | null = null;
@@ -54,15 +55,7 @@ export class VoiceService {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
-    if (SpeechRecognitionConstructor) {
-      try {
-        this.recognition = new SpeechRecognitionConstructor();
-        this.isSupported = true;
-      } catch (e) {
-        console.warn('[VoiceService] Failed to construct SpeechRecognition:', e);
-        this.isSupported = false;
-      }
-    }
+    this.isSupported = !!SpeechRecognitionConstructor;
   }
 
   isVoiceAPISupported(): boolean {
@@ -103,7 +96,6 @@ export class VoiceService {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Release test stream immediately
       stream.getTracks().forEach((track) => track.stop());
       return true;
     } catch (err) {
@@ -122,7 +114,6 @@ export class VoiceService {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const audioInputs = devices.filter((d) => d.kind === 'audioinput');
-      // Filter unique device IDs
       const unique = audioInputs.filter((d, idx, arr) => arr.findIndex((x) => x.deviceId === d.deviceId) === idx);
       return unique;
     } catch {
@@ -130,16 +121,12 @@ export class VoiceService {
     }
   }
 
-  /**
-   * Set specific microphone device ID
-   */
   setDeviceId(deviceId: string): void {
     this.selectedDeviceId = deviceId || null;
   }
 
   /**
    * Start Web Audio API Volume Monitoring with AudioContext.resume() and RMS calculation.
-   * Resilient to mobile hardware limitations and non-blocking for speech recognition.
    */
   async startAudioMeter(onVolume: (vol: number) => void): Promise<boolean> {
     try {
@@ -149,7 +136,6 @@ export class VoiceService {
 
       this.stopAudioMeter();
 
-      // Build non-conflicting constraints
       const audioConstraint: boolean | MediaTrackConstraints =
         this.selectedDeviceId && this.selectedDeviceId !== 'default' && this.selectedDeviceId !== ''
           ? {
@@ -177,7 +163,6 @@ export class VoiceService {
 
       this.audioContext = new AudioCtx();
 
-      // Resume AudioContext for browser autoplay policy
       if (this.audioContext.state === 'suspended') {
         try {
           await this.audioContext.resume();
@@ -238,72 +223,103 @@ export class VoiceService {
   }
 
   /**
-   * Initialize speech recognition
+   * Create fresh SpeechRecognition instance with clean listeners to prevent browser zombie sessions
    */
-  initialize(config: VoiceServiceConfig): void {
-    if (!this.recognition) {
-      throw new Error('Speech Recognition API not supported in this browser');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private getOrCreateRecognition(): any {
+    const SpeechRecognitionConstructor =
+      typeof window !== 'undefined' &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+
+    if (!SpeechRecognitionConstructor) return null;
+
+    if (this.recognition) {
+      try {
+        this.recognition.onstart = null;
+        this.recognition.onresult = null;
+        this.recognition.onerror = null;
+        this.recognition.onend = null;
+        this.recognition.onaudiostart = null;
+        this.recognition.abort();
+      } catch {}
     }
 
-    this.currentConfig = config;
-    this.recognition.continuous = config.continuous ?? true;
-    this.recognition.interimResults = config.interimResults ?? true;
-    this.recognition.lang = config.lang ?? 'en-IN';
-    this.recognition.maxAlternatives = 3;
+    try {
+      const rec = new SpeechRecognitionConstructor();
+      rec.continuous = this.currentConfig?.continuous ?? true;
+      rec.interimResults = this.currentConfig?.interimResults ?? true;
+      rec.lang = this.currentLang || this.currentConfig?.lang || 'en-IN';
+      rec.maxAlternatives = 5;
+
+      this.attachRecognitionHandlers(rec);
+      this.recognition = rec;
+      return rec;
+    } catch (err) {
+      console.warn('[VoiceService] Failed creating SpeechRecognition instance:', err);
+      return null;
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private attachRecognitionHandlers(rec: any): void {
+    if (!rec) return;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.recognition.onresult = (event: any) => {
+    rec.onresult = (event: any) => {
       this.consecutiveErrors = 0;
-      let cumulativeTranscript = '';
-      let currentChunk = '';
-      let isFinal = false;
+      let interimChunk = '';
+      let finalTranscript = '';
       const allAlternatives: string[] = [];
 
-      // 1. Cumulative transcript across all speech events
       for (let i = 0; i < event.results.length; i++) {
         const res = event.results[i];
         if (!res) continue;
-        const piece = res[0]?.transcript || '';
-        cumulativeTranscript += ' ' + piece;
-        if (i === event.results.length - 1) {
-          isFinal = res.isFinal;
+
+        if (res.isFinal) {
+          finalTranscript += ' ' + (res[0]?.transcript || '');
+        } else {
+          interimChunk += ' ' + (res[0]?.transcript || '');
         }
+
         for (let a = 0; a < res.length; a++) {
-          const altText = res[a]?.transcript?.trim();
-          if (altText) allAlternatives.push(altText);
+          const piece = res[a]?.transcript?.trim();
+          if (piece) allAlternatives.push(piece);
         }
       }
 
-      // 2. Current interim chunk (use best alternative)
+      // Current utterance chunk
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const res = event.results[i];
         if (!res) continue;
-        const piece = res[0]?.transcript || '';
-        if (piece) {
-          currentChunk += ' ' + piece;
+        const topPiece = res[0]?.transcript || '';
+        if (topPiece && !interimChunk.includes(topPiece)) {
+          interimChunk += ' ' + topPiece;
         }
       }
 
-      const cleanChunk = currentChunk.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
-      const cleanFull = cumulativeTranscript.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+      const cleanInterim = interimChunk.trim();
+      const cleanFinal = finalTranscript.trim();
+      const cleanFull = `${cleanFinal} ${cleanInterim}`.trim();
 
-      if (cleanChunk || cleanFull || allAlternatives.length > 0) {
-        config.onResult(cleanChunk || cleanFull, isFinal, cleanFull, allAlternatives);
+      if (cleanInterim || cleanFinal || allAlternatives.length > 0) {
+        if (this.currentConfig?.onResult) {
+          this.currentConfig.onResult(cleanInterim || cleanFinal || cleanFull, !!cleanFinal, cleanFull, allAlternatives);
+        }
       }
     };
 
-    this.recognition.onaudiostart = () => {
+    rec.onaudiostart = () => {
       console.log('[VoiceService] 🎙️ Speech recognition audio started');
-      if (config.onAudioStart) config.onAudioStart();
+      if (this.currentConfig?.onAudioStart) this.currentConfig.onAudioStart();
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.recognition.onerror = (event: any) => {
+    rec.onerror = (event: any) => {
       const err = event.error || 'unknown';
       console.warn('[VoiceService] Speech Recognition Event:', err);
 
       if (err === 'no-speech' || err === 'aborted') {
-        // Normal silence event on mobile devices; auto-reconnect handled via onend
         return;
       }
 
@@ -311,78 +327,91 @@ export class VoiceService {
         this.shouldRestart = false;
         this.isListening = false;
         this.isStarting = false;
-        config.onError('Microphone access denied. Please click the lock or camera/mic icon in your browser address bar to allow microphone permission.');
+        if (this.currentConfig?.onError) {
+          this.currentConfig.onError('Microphone access denied. Please allow microphone permissions in your browser URL bar.');
+        }
         return;
       }
 
       if (err === 'audio-capture') {
-        config.onError('Microphone audio capture busy. Re-initializing microphone...');
+        if (this.currentConfig?.onError) {
+          this.currentConfig.onError('Microphone audio capture busy. Re-initializing microphone...');
+        }
         this.consecutiveErrors++;
         return;
       }
 
       if (err === 'network') {
-        config.onError('Speech service network issue. Reconnecting...');
         this.consecutiveErrors++;
         return;
       }
 
-      config.onError(`Voice status: ${err}`);
+      if (this.currentConfig?.onError) {
+        this.currentConfig.onError(`Voice status: ${err}`);
+      }
     };
 
-    this.recognition.onstart = () => {
+    rec.onstart = () => {
       this.isListening = true;
       this.isStarting = false;
       this.consecutiveErrors = 0;
       console.log('[VoiceService] 🔊 Speech recognition listening active');
-      if (config.onStart) config.onStart();
+      if (this.currentConfig?.onStart) this.currentConfig.onStart();
     };
 
-    this.recognition.onend = () => {
+    rec.onend = () => {
       this.isListening = false;
       this.isStarting = false;
-      console.log('[VoiceService] 🛑 Session cycle finished. ShouldRestart:', this.shouldRestart);
+      console.log('[VoiceService] 🛑 Speech session cycle ended. ShouldRestart:', this.shouldRestart);
 
-      if (config.onEnd) config.onEnd();
+      if (this.currentConfig?.onEnd) this.currentConfig.onEnd();
 
       if (this.shouldRestart) {
-        this.scheduleRestart();
+        this.scheduleRestart(150);
       }
     };
   }
 
-  /**
-   * Update configuration callbacks dynamically without destroying recognition
-   */
+  initialize(config: VoiceServiceConfig): void {
+    this.currentConfig = config;
+    if (config.lang) {
+      this.currentLang = config.lang;
+    }
+  }
+
   updateConfig(config: Partial<VoiceServiceConfig>): void {
     if (this.currentConfig) {
       this.currentConfig = { ...this.currentConfig, ...config };
-      if (config.lang && this.recognition) {
-        this.recognition.lang = config.lang;
+      if (config.lang) {
+        this.currentLang = config.lang;
       }
     }
   }
 
-  private scheduleRestart(delayMs: number = 300): void {
+  private scheduleRestart(delayMs: number = 200): void {
     if (this.restartTimeout) {
       globalThis.clearTimeout(this.restartTimeout);
       this.restartTimeout = null;
     }
 
-    // Exponential backoff if consecutive errors occur
-    const backoff = Math.min(3000, delayMs + this.consecutiveErrors * 400);
+    if (!this.shouldRestart) return;
+
+    const backoff = Math.min(2500, delayMs + this.consecutiveErrors * 300);
 
     this.restartTimeout = globalThis.setTimeout(() => {
       if (this.shouldRestart && !this.isListening && !this.isStarting) {
         try {
-          this.isStarting = true;
-          this.recognition.start();
-          console.log('[VoiceService] 🔄 Auto-reconnected speech recognition');
+          const rec = this.getOrCreateRecognition();
+          if (rec) {
+            this.isStarting = true;
+            rec.start();
+            console.log('[VoiceService] 🔄 Auto-reconnected speech recognition');
+          }
         } catch (e) {
           this.isStarting = false;
           console.warn('[VoiceService] Reconnection notice:', e);
           if (this.shouldRestart) {
-            this.scheduleRestart(800);
+            this.scheduleRestart(600);
           }
         }
       }
@@ -390,23 +419,21 @@ export class VoiceService {
   }
 
   setLanguage(lang: string): void {
-    if (this.recognition) {
-      this.recognition.lang = lang;
-      if (this.currentConfig) {
-        this.currentConfig.lang = lang;
-      }
-      if (this.isListening) {
-        // Soft restart to apply new language
-        try {
-          this.recognition.stop();
-        } catch {}
-      }
+    this.currentLang = lang;
+    if (this.currentConfig) {
+      this.currentConfig.lang = lang;
+    }
+    if (this.isListening) {
+      // Soft restart to apply language
+      try {
+        this.recognition?.stop();
+      } catch {}
     }
   }
 
   start(): void {
-    if (!this.recognition) {
-      throw new Error('Speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
+    if (!this.isSupported) {
+      throw new Error('Speech recognition is not supported in this browser. Please use Google Chrome, Edge, or Safari.');
     }
     this.shouldRestart = true;
     this.consecutiveErrors = 0;
@@ -416,13 +443,16 @@ export class VoiceService {
     }
 
     try {
+      const rec = this.getOrCreateRecognition();
+      if (!rec) {
+        throw new Error('Failed to initialize speech engine');
+      }
       this.isStarting = true;
-      this.recognition.start();
+      rec.start();
     } catch (e) {
       this.isStarting = false;
       console.warn('[VoiceService] Start notice:', e);
-      // If already started or transitioning, retry safely
-      this.scheduleRestart(400);
+      this.scheduleRestart(300);
     }
   }
 
@@ -467,23 +497,31 @@ export class VoiceService {
  */
 export const ALLOWED_4_TRIGGERS: Record<string, string[]> = {
   help: [
-    'help', 'help me', 'please help', 'help please', 'help emergency', 'help help', 'need help', 'i need help', 'helpp', 'save me', 'emergency', 'sos',
-    'हेल्प', 'हेल्प मी', 'मदद', 'सहायता'
+    'help', 'help me', 'please help', 'help please', 'help emergency', 'help help',
+    'need help', 'i need help', 'helpp', 'save me', 'emergency', 'sos', 'held', 'health',
+    'helping', 'helped', 'khatra', 'danger', 'police', 'ambulance',
+    'हेल्प', 'हेल्प मी', 'मदद', 'सहायता', 'खतरा', 'पुलिस', 'बचाओ'
   ],
   bachao: [
-    'bachao', 'bacho', 'bachoo', 'bachaao', 'bachav', 'bachao bachao', 'bacho bacho', 'mujhe bachao', 'bachao mujhe', 'bchao', 'bachaho', 'bachaoji',
+    'bachao', 'bacho', 'bachoo', 'bachaao', 'bachav', 'bachao bachao', 'bacho bacho',
+    'mujhe bachao', 'bachao mujhe', 'bchao', 'bachaho', 'bachaoji', 'batch oh', 'but chow',
+    'bacchao', 'bacaho', 'bachaoo', 'bachho',
     'बचाओ', 'बचो', 'बचाव', 'बचाओ बचाओ', 'मुझे बचाओ', 'बचाओ मुझे'
   ],
   suraksha: [
-    'suraksha', 'suraksh', 'suraksha karo', 'meri suraksha', 'surakshaa', 'surksha', 'surakhsha', 'suraksha app', 'surakhsa',
-    'सुरक्षा', 'सुरक्ष', 'सुरक्षा करो'
+    'suraksha', 'suraksh', 'suraksha karo', 'meri suraksha', 'surakshaa', 'surksha',
+    'surakhsha', 'suraksha app', 'surakhsa', 'siraksha', 'so raksha', 'surakshit',
+    'सुरक्षा', 'सुरक्ष', 'सुरक्षा करो', 'मेरी सुरक्षा'
   ],
   'madad karo': [
-    'madad karo', 'madad', 'madat', 'madat karo', 'meri madad karo', 'madad kijiye', 'madad chahiye', 'madadh', 'maddat', 'sahayata', 'sahayata karo',
-    'मदद करो', 'मदद', 'मदद कीजिये', 'मेरी मदद करो', 'मदद चाहिए', 'सहायता करो'
+    'madad karo', 'madad', 'madat', 'madat karo', 'meri madad karo', 'madad kijiye',
+    'madad chahiye', 'madadh', 'maddat', 'sahayata', 'sahayata karo', 'mother car',
+    'mad at', 'madath', 'madatji',
+    'मदद करो', 'मदद', 'मदद कीजिये', 'मेरी मदद करो', 'मदद चाहिए', 'सहायता', 'सहायता करो'
   ],
   four: [
-    'four', '4', 'for', 'four four', '4 4', 'char', 'chaar', 'number 4', 'number four', 'trigger 4', 'trigger four', '४', 'चार'
+    'four', '4', 'for', 'fore', 'four four', '4 4', 'char', 'chaar', 'number 4',
+    'number four', 'trigger 4', 'trigger four', '४', 'चार', 'फोर'
   ],
 };
 
@@ -495,10 +533,8 @@ function matchesExactWordOrPhrase(text: string, phrase: string): boolean {
   const t = text.trim();
   const p = phrase.trim().toLowerCase();
 
-  // If text equals phrase directly
   if (t === p) return true;
 
-  // Word boundary regex test: (^|\s)phrase(\s|$)
   const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`(^|\\s)${escaped}(\\s|$)`, 'u');
   return regex.test(t);
@@ -536,8 +572,7 @@ export const triggerWordMatcher = {
       const words = text.split(/\s+/).filter(Boolean);
       if (words.length === 0) continue;
 
-      // Filter out pure casual greetings if no emergency word is present
-      const isPureGreeting = words.every((w) => ['hello', 'hey', 'hi', 'hola'].includes(w));
+      const isPureGreeting = words.every((w) => ['hello', 'hey', 'hi', 'hola', 'ok', 'okay'].includes(w));
       if (isPureGreeting) continue;
 
       // 1. Check all standard triggers (phrase matching & word boundaries)
