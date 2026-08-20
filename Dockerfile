@@ -1,9 +1,8 @@
 # Build Stage
 FROM maven:3.9.6-eclipse-temurin-17 AS build
 WORKDIR /app
-COPY jansuraksha-backend/jansuraksha-backend/pom.xml .
-RUN mvn dependency:go-offline -B
-COPY jansuraksha-backend/jansuraksha-backend/src ./src
+COPY jansuraksha-backend/pom.xml .
+COPY jansuraksha-backend/src ./src
 RUN mvn clean package -DskipTests
 
 # Run Stage
