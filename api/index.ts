@@ -63,7 +63,7 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// CORS headers
+// CORS & Path Normalization headers
 app.use((req: Request, res: Response, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -73,6 +73,13 @@ app.use((req: Request, res: Response, next) => {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+
+  // Normalize path if rewritten by Vercel serverless proxy
+  const matchedPath = (req.headers['x-matched-path'] || req.headers['x-vercel-path'] || req.headers['x-now-route-matches']) as string;
+  if (matchedPath && matchedPath.startsWith('/api')) {
+    req.url = matchedPath;
+  }
+
   next();
 });
 
