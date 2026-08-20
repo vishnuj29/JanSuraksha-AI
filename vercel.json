@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://jansuraksha-ai.onrender.com/api/:path*"
+      "destination": "/api"
     },
     {
       "source": "/((?!api/|.*\\..*).*)$",
