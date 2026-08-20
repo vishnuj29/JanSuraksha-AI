@@ -36,17 +36,13 @@ class EmailService {
 
     if (user && pass) {
       try {
+        const cleanPass = pass.replace(/\s+/g, '');
         if (isGmail) {
           this.transporter = nodemailer.createTransport({
-            host: 'smtp.gmail.com',
-            port: 587,
-            secure: false, // TLS via STARTTLS
+            service: 'gmail',
             auth: {
-              user,
-              pass,
-            },
-            tls: {
-              rejectUnauthorized: false,
+              user: user.trim(),
+              pass: cleanPass,
             },
           });
         } else {
@@ -55,15 +51,15 @@ class EmailService {
             port,
             secure: port === 465,
             auth: {
-              user,
-              pass,
+              user: user.trim(),
+              pass: cleanPass,
             },
             tls: {
               rejectUnauthorized: false,
             },
           });
         }
-        console.log(`[EmailService] 📧 SMTP Transporter created successfully for: ${user} (${host}:${port})`);
+        console.log(`[EmailService] 📧 SMTP Transporter created successfully for: ${user}`);
         return this.transporter;
       } catch (err) {
         console.error('[EmailService] Failed to create SMTP transporter:', err);
