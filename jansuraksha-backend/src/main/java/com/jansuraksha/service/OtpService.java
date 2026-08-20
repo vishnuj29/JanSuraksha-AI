@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class OtpService {
 
-    @Value("${twilio.verify-service-sid}")
+    @Value("${twilio.verify-service-sid:}")
     private String verifyServiceSid;
 
     public void sendOtp(String phone) {
