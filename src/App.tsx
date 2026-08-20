@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Outlet, RouterProvider } from 'react-router-dom';
 
+import { Toaster } from 'sonner';
 import CookieBannerErrorBoundary from '@/components/CookieBannerErrorBoundary';
 import RootLayout from './layouts/RootLayout';
 import Spinner from './components/Spinner';
@@ -38,6 +39,7 @@ export default function App() {
   return (
     <>
       <RouterProvider router={router} />
+      <Toaster richColors position="top-right" theme="dark" closeButton />
       <CookieBannerErrorBoundary>
         <Suspense fallback={null}>
           <CookieBanner />
