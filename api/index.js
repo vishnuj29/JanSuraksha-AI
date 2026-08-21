@@ -479,8 +479,8 @@ var EmailService = class {
     }
     const host = process.env.SMTP_HOST || "smtp.gmail.com";
     const rawPort = process.env.SMTP_PORT;
-    const user = (process.env.SMTP_USER || "").trim();
-    const pass = (process.env.SMTP_PASS || "").trim().replace(/\s+/g, "");
+    const user = (process.env.SMTP_USER || "ec23019@glbitm.ac.in").trim();
+    const pass = (process.env.SMTP_PASS || "qvlsjfrhfvovnruv").trim().replace(/\s+/g, "");
     const isGmail = host.includes("gmail.com") || user.includes("gmail.com") || user.includes("glbitm.ac.in");
     if (user && pass) {
       try {
@@ -526,15 +526,8 @@ var EmailService = class {
     return null;
   }
   getFromAddress() {
-    const user = (process.env.SMTP_USER || "").trim();
-    if (user.includes("@")) {
-      return `"JanSuraksha AI Security" <${user}>`;
-    }
-    const configuredFrom = process.env.SMTP_FROM;
-    if (configuredFrom && configuredFrom.includes("@")) {
-      return configuredFrom.replace(/^"+|"+$/g, "");
-    }
-    return `"JanSuraksha AI Security" <security@jansuraksha.ai>`;
+    const user = (process.env.SMTP_USER || "ec23019@glbitm.ac.in").trim();
+    return `"JanSuraksha AI Security" <${user}>`;
   }
   /**
    * Send 6-digit Login OTP Email via SMTP
