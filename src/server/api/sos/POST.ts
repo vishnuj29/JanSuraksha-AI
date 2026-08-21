@@ -50,13 +50,22 @@ export default async function handler(req: Request, res: Response) {
       ? new Date(timestamp).toLocaleString('en-IN')
       : new Date().toLocaleString('en-IN');
 
+    const lat = coordinates?.latitude;
+    const lng = coordinates?.longitude;
+
+    let locationMapUrl: string;
+    if (lat !== undefined && lng !== undefined) {
+      locationMapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+    } else if (location && location.startsWith('http')) {
+      locationMapUrl = location;
+    } else {
+      locationMapUrl = `https://www.google.com/maps?q=28.6139,77.2090`;
+    }
+
     const locationDisplay =
-      address || location || (coordinates ? `Lat: ${coordinates.latitude.toFixed(4)}, Lng: ${coordinates.longitude.toFixed(4)}` : 'Live Area');
-    const locationMapUrl = coordinates
-      ? `https://www.google.com/maps?q=${coordinates.latitude},${coordinates.longitude}`
-      : location && location.startsWith('http')
-      ? location
-      : undefined;
+      address ||
+      (location && !location.startsWith('http') ? location : '') ||
+      (lat !== undefined && lng !== undefined ? `GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}` : 'Live GPS Area');
 
     // Record in DB Store
     const alertRecord = dbStore.createSosAlert({

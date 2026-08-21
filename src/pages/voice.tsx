@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Mic, Shield, AlertTriangle, CheckCircle, Settings, Eye, EyeOff, Save, Zap, Volume2, Globe, Activity, Sliders, Smartphone, Laptop, Lock } from 'lucide-react';
 import { VoiceService, triggerWordMatcher, SpeechDiagnostics } from '../lib/voiceService';
 import { sendSOSEmergency } from '../lib/sosService';
+import { locationService } from '../lib/locationService';
 import { api } from '../lib/api-client';
 import { toast } from 'sonner';
 
@@ -37,8 +38,11 @@ export default function VoicePage() {
   const savedWordRef = useRef(savedWord);
   savedWordRef.current = savedWord;
 
-  // 1. Initialize Voice Service once on component mount
+  // 1. Initialize Voice Service & warm up location once on component mount
   useEffect(() => {
+    // Proactively warm up GPS location for zero-latency SOS dispatch
+    locationService.getCurrentPosition().catch(() => {});
+
     const voiceService = new VoiceService();
     voiceServiceRef.current = voiceService;
 

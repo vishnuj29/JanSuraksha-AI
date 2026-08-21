@@ -783,35 +783,57 @@ var EmailService = class {
       console.warn("[EmailService] No valid recipient email addresses for SOS alert.");
       return { success: false, error: "No valid email recipients" };
     }
+    const mapUrl = alertData.locationUrl || "https://www.google.com/maps?q=28.6139,77.2090";
+    const addressDisplay = alertData.address || "Real-time GPS Tracking Active";
     const htmlContent = `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="utf-8">
       <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #450a0a; color: #ffffff; padding: 20px; margin: 0; }
-        .container { max-width: 580px; margin: 0 auto; background: #7f1d1d; border: 2px solid #ef4444; border-radius: 16px; padding: 28px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .title { font-size: 26px; font-weight: 900; color: #ffffff; text-align: center; letter-spacing: -0.5px; }
-        .alert-box { background: #991b1b; padding: 20px; border-radius: 12px; margin: 20px 0; border: 1px solid rgba(255,255,255,0.2); }
-        .alert-row { font-size: 15px; margin: 8px 0; color: #fee2e2; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #1a0505; color: #ffffff; padding: 16px; margin: 0; }
+        .container { max-width: 600px; margin: 0 auto; background: #2a0808; border: 2px solid #ef4444; border-radius: 16px; padding: 28px; box-shadow: 0 12px 40px rgba(239, 68, 68, 0.35); }
+        .badge { display: inline-block; background: #dc2626; color: #ffffff; font-weight: 800; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; padding: 6px 14px; border-radius: 20px; margin-bottom: 12px; }
+        .title { font-size: 26px; font-weight: 900; color: #ffffff; margin: 0 0 6px 0; letter-spacing: -0.5px; }
+        .subtitle { font-size: 14px; color: #fca5a5; margin: 0 0 24px 0; }
+        .alert-box { background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); padding: 20px; border-radius: 12px; margin: 20px 0; }
+        .alert-row { font-size: 15px; margin: 10px 0; color: #fee2e2; line-height: 1.5; }
         .alert-row strong { color: #ffffff; }
-        .btn { display: inline-block; background: #ffffff; color: #991b1b; font-weight: 800; padding: 14px 28px; border-radius: 10px; text-decoration: none; margin-top: 18px; font-size: 15px; text-align: center; }
-        .footer { font-size: 11px; color: #fca5a5; text-align: center; margin-top: 20px; }
+        .map-card { background: #180303; border: 2px solid #f87171; border-radius: 14px; padding: 22px; margin: 24px 0; text-align: center; }
+        .map-title { font-size: 17px; font-weight: 800; color: #ffffff; margin-bottom: 8px; }
+        .map-addr { font-size: 14px; color: #fecaca; margin-bottom: 18px; line-height: 1.4; word-break: break-word; }
+        .btn-map { display: inline-block; background: #ef4444; color: #ffffff !important; font-weight: 800; padding: 15px 32px; border-radius: 12px; text-decoration: none; font-size: 16px; box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5); }
+        .raw-link { font-size: 12px; color: #93c5fd; margin-top: 14px; word-break: break-all; }
+        .footer { font-size: 11px; color: #9ca3af; text-align: center; margin-top: 24px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; }
       </style>
     </head>
     <body>
       <div class="container">
-        <div class="title">\u{1F6A8} EMERGENCY DISTRESS ALERT</div>
+        <div style="text-align: center;">
+          <div class="badge">\u26A0\uFE0F DISTRESS SIGNAL DETECTED</div>
+          <div class="title">\u{1F6A8} CRITICAL EMERGENCY SOS</div>
+          <div class="subtitle">JanSuraksha AI 24/7 Rapid Response Dispatch</div>
+        </div>
+
         <div class="alert-box">
           <div class="alert-row"><strong>\u{1F464} User:</strong> ${alertData.userName}</div>
-          <div class="alert-row"><strong>\u{1F4DE} Contact Number:</strong> ${alertData.phone}</div>
-          <div class="alert-row"><strong>\u{1F399}\uFE0F Distress Trigger:</strong> ${alertData.triggerWord || "Voice / Manual SOS"}</div>
+          <div class="alert-row"><strong>\u{1F4DE} Contact Phone:</strong> <a href="tel:${alertData.phone}" style="color: #60a5fa; font-weight: bold; text-decoration: none;">${alertData.phone}</a></div>
+          <div class="alert-row"><strong>\u{1F399}\uFE0F Distress Trigger:</strong> <span style="background: #991b1b; padding: 3px 8px; border-radius: 6px; font-weight: bold;">${alertData.triggerWord || "Voice / Manual SOS"}</span></div>
           <div class="alert-row"><strong>\u23F1\uFE0F Time:</strong> ${alertData.timestamp || (/* @__PURE__ */ new Date()).toLocaleString("en-IN")} (IST)</div>
-          ${alertData.address ? `<div class="alert-row"><strong>\u{1F4CD} Detected Location:</strong> ${alertData.address}</div>` : ""}
-          ${alertData.locationUrl ? `<div style="text-align: center;"><a href="${alertData.locationUrl}" class="btn" target="_blank">\u{1F4CD} View Live GPS Location On Map</a></div>` : ""}
         </div>
+
+        <div class="map-card">
+          <div class="map-title">\u{1F4CD} LIVE GPS LOCATION & TRACKING</div>
+          <div class="map-addr"><strong>Location Area:</strong> ${addressDisplay}</div>
+          <a href="${mapUrl}" class="btn-map" target="_blank">\u{1F4CD} Open Live Location in Google Maps</a>
+          <div class="raw-link">
+            <strong>Direct Tracking URL:</strong><br/>
+            <a href="${mapUrl}" style="color: #60a5fa;" target="_blank">${mapUrl}</a>
+          </div>
+        </div>
+
         <div class="footer">
-          JanSuraksha AI Automated Emergency Response System. Please reach out to this person immediately.
+          JanSuraksha AI Automated Emergency Response System. Please contact or dispatch assistance to this person immediately.
         </div>
       </div>
     </body>
@@ -823,8 +845,14 @@ var EmailService = class {
         const info = await transporter.sendMail({
           from: fromAddress,
           to: validRecipients.join(", "),
-          subject: `\u{1F6A8} CRITICAL EMERGENCY ALERT from ${alertData.userName} (${alertData.triggerWord || "SOS"})`,
-          text: `CRITICAL EMERGENCY ALERT: ${alertData.userName} (${alertData.phone}) activated an SOS distress alert at ${alertData.timestamp || (/* @__PURE__ */ new Date()).toLocaleString()}. Location: ${alertData.address || "Unknown"}. Live Map: ${alertData.locationUrl || "N/A"}`,
+          subject: `\u{1F6A8} CRITICAL EMERGENCY ALERT: ${alertData.userName} needs help (${alertData.triggerWord || "SOS"})`,
+          text: `\u{1F6A8} CRITICAL EMERGENCY ALERT from ${alertData.userName} (${alertData.phone})!
+Trigger: ${alertData.triggerWord || "Emergency"}
+Time: ${alertData.timestamp || (/* @__PURE__ */ new Date()).toLocaleString()}
+Location: ${addressDisplay}
+Live Google Maps Tracking URL: ${mapUrl}
+
+Please check on this person immediately!`,
           html: htmlContent
         });
         console.log(`[EmailService] \u2705 Emergency SOS email successfully delivered to [${validRecipients.join(", ")}]. Message ID: ${info.messageId}`);
@@ -1255,8 +1283,17 @@ async function handler10(req, res) {
     const phone = rawPhone || "+919876543210";
     const userName = rawUser || "JanSuraksha User";
     const timeStr = timestamp ? new Date(timestamp).toLocaleString("en-IN") : (/* @__PURE__ */ new Date()).toLocaleString("en-IN");
-    const locationDisplay = address || location || (coordinates ? `Lat: ${coordinates.latitude.toFixed(4)}, Lng: ${coordinates.longitude.toFixed(4)}` : "Live Area");
-    const locationMapUrl = coordinates ? `https://www.google.com/maps?q=${coordinates.latitude},${coordinates.longitude}` : location && location.startsWith("http") ? location : void 0;
+    const lat = coordinates?.latitude;
+    const lng = coordinates?.longitude;
+    let locationMapUrl;
+    if (lat !== void 0 && lng !== void 0) {
+      locationMapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+    } else if (location && location.startsWith("http")) {
+      locationMapUrl = location;
+    } else {
+      locationMapUrl = `https://www.google.com/maps?q=28.6139,77.2090`;
+    }
+    const locationDisplay = address || (location && !location.startsWith("http") ? location : "") || (lat !== void 0 && lng !== void 0 ? `GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}` : "Live GPS Area");
     const alertRecord = dbStore.createSosAlert({
       userId,
       user: userName,

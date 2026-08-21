@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/sos_alert_model.dart';
 import '../services/api_service.dart';
@@ -103,17 +103,19 @@ class SosProvider with ChangeNotifier {
     notifyListeners();
 
     // 1. Send Enterprise SOS to Cloud (Sends rich HTML Email with Live Google Maps link to user + all guardians)
-    _apiService.triggerSos(
-      user: userName,
-      phone: userPhone,
-      userEmail: userEmail,
-      guardianEmails: guardianEmails,
-      location: locationService.currentAddress,
-      latitude: lat,
-      longitude: lng,
-      type: type,
-      triggerWord: triggerWord,
-    );
+    try {
+      await _apiService.triggerSos(
+        user: userName,
+        phone: userPhone,
+        userEmail: userEmail,
+        guardianEmails: guardianEmails,
+        location: 'https://maps.google.com/?q=$lat,$lng',
+        latitude: lat,
+        longitude: lng,
+        type: type,
+        triggerWord: triggerWord,
+      );
+    } catch (_) {}
 
     // 2. Dispatch Direct Offline Telephony SMS with live GPS link to all guardian numbers
     if (guardianPhones.isNotEmpty) {
