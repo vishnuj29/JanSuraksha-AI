@@ -75,12 +75,6 @@ app.use((req: Request, res: Response, next) => {
     return res.status(200).end();
   }
 
-  // Normalize path if rewritten by Vercel serverless proxy
-  const matchedPath = (req.headers['x-matched-path'] || req.headers['x-vercel-path'] || req.headers['x-now-route-matches']) as string;
-  if (matchedPath && matchedPath.startsWith('/api')) {
-    req.url = matchedPath;
-  }
-
   next();
 });
 
@@ -89,9 +83,23 @@ const mount = (route: string, method: 'get' | 'post' | 'put' | 'delete', handler
   const apiRoute = route.startsWith('/api') ? route : `/api${route}`;
   const rawRoute = route.startsWith('/api') ? route.replace(/^\/api/, '') : route;
 
-  app[method](apiRoute, handler);
+  const wrappedHandler = async (req: Request, res: Response) => {
+    try {
+      await handler(req, res);
+    } catch (err: any) {
+      console.error(`[API ERROR in ${route}]:`, err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: err?.message || 'Internal Server Error',
+        });
+      }
+    }
+  };
+
+  app[method](apiRoute, wrappedHandler);
   if (rawRoute && rawRoute !== '') {
-    app[method](rawRoute, handler);
+    app[method](rawRoute, wrappedHandler);
   }
 };
 
