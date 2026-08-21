@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "vite",
     "start": "npx serve -s dist -1 3000",
-    "build": "vite build && esbuild api/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=api/index.js --packages=external",
+    "build": "vite build && esbuild src/server/entry.ts --bundle --platform=node --target=node20 --format=esm --outfile=api/index.js --packages=external",
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",

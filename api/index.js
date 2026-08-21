@@ -1,4 +1,4 @@
-// api/index.ts
+// src/server/entry.ts
 import express from "express";
 import dotenv2 from "dotenv";
 import path2 from "path";
@@ -2155,7 +2155,7 @@ async function handler33(_req, res) {
   });
 }
 
-// api/index.ts
+// src/server/entry.ts
 dotenv2.config({ path: path2.resolve(process.cwd(), ".env") });
 var app = express();
 app.use(express.json({ limit: "50mb" }));
