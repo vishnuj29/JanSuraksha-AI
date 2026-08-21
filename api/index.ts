@@ -173,4 +173,6 @@ app.use((req: Request, res: Response) => {
   res.status(404).json({ success: false, message: `Endpoint not found: ${req.method} ${req.originalUrl || req.url}` });
 });
 
-export default app;
+export default function handler(req: any, res: any) {
+  return app(req, res);
+}
