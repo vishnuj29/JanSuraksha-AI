@@ -29,34 +29,43 @@ class EmailService {
     }
 
     const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const port = parseInt(process.env.SMTP_PORT || '587', 10);
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    const isGmail = host.includes('gmail.com') || (user && user.includes('gmail.com')) || (user && user.includes('glbitm.ac.in'));
+    const rawPort = process.env.SMTP_PORT;
+    const user = (process.env.SMTP_USER || '').trim();
+    const pass = (process.env.SMTP_PASS || '').trim().replace(/\s+/g, '');
+    const isGmail = host.includes('gmail.com') || user.includes('gmail.com') || user.includes('glbitm.ac.in');
 
     if (user && pass) {
       try {
-        const cleanPass = pass.replace(/\s+/g, '');
         if (isGmail) {
+          // Direct SSL Port 465 is the most reliable for Gmail in Serverless Lambdas
           this.transporter = nodemailer.createTransport({
-            service: 'gmail',
+            host: 'smtp.gmail.com',
+            port: 465,
+            secure: true,
             auth: {
-              user: user.trim(),
-              pass: cleanPass,
+              user,
+              pass,
             },
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000,
           });
         } else {
+          const port = parseInt(rawPort || '587', 10);
           this.transporter = nodemailer.createTransport({
             host,
             port,
             secure: port === 465,
             auth: {
-              user: user.trim(),
-              pass: cleanPass,
+              user,
+              pass,
             },
             tls: {
               rejectUnauthorized: false,
             },
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000,
           });
         }
         console.log(`[EmailService] 📧 SMTP Transporter created successfully for: ${user}`);

@@ -53,6 +53,7 @@ import assistantChatHandler from '../src/server/api/assistant/chat/POST';
 import adminStatsHandler from '../src/server/api/admin/stats/GET';
 import adminUsersHandler from '../src/server/api/admin/users/GET';
 import adminAlertsHandler from '../src/server/api/admin/alerts/GET';
+import adminTestEmailHandler from '../src/server/api/admin/test-email/GET';
 
 // Health Handler
 import healthHandler from '../src/server/api/health/GET';
@@ -145,6 +146,7 @@ mount('/assistant/chat', 'post', assistantChatHandler);
 mount('/admin/stats', 'get', adminStatsHandler);
 mount('/admin/users', 'get', adminUsersHandler);
 mount('/admin/alerts', 'get', adminAlertsHandler);
+mount('/admin/test-email', 'get', adminTestEmailHandler);
 
 // 404 fallback for API
 app.use((req: Request, res: Response) => {
