@@ -1,0 +1,25 @@
+﻿{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "JanSuraksha Mobile (Chrome Web)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["-d", "chrome"]
+    },
+    {
+      "name": "JanSuraksha Mobile (Android / Emulator)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart"
+    },
+    {
+      "name": "JanSuraksha Mobile (Windows Desktop)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["-d", "windows"]
+    }
+  ]
+}
