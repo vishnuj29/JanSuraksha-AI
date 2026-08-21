@@ -61,13 +61,15 @@ export default async function handler(req: Request, res: Response) {
       phone: rawPhone,
       user: rawUser,
       userId,
+      userEmail,
+      guardianEmails,
       location,
       address,
       coordinates,
       triggerWord,
       message: customMessage,
       timestamp,
-    } = req.body as SOSRequest;
+    } = req.body as (SOSRequest & { userEmail?: string; guardianEmails?: string[] });
 
     const phone = rawPhone || '+919876543210';
     const userName = rawUser || 'JanSuraksha User';
@@ -112,13 +114,25 @@ export default async function handler(req: Request, res: Response) {
     // 1. Dispatch Twilio WhatsApp/SMS
     const alertId = await sendWhatsAppAlert(phone, fullMessage);
 
-    // 2. Dispatch SMTP Emergency Alert Email to system admin & emergency email contacts
+    // 2. Dispatch SMTP Emergency Alert Email to all guardian emails, user email, and admin
     const emergencyRecipients: string[] = [];
     if (process.env.SMTP_USER && process.env.SMTP_USER.includes('@')) {
       emergencyRecipients.push(process.env.SMTP_USER);
     }
     if (process.env.EMERGENCY_ALERT_EMAIL && process.env.EMERGENCY_ALERT_EMAIL.includes('@')) {
       emergencyRecipients.push(process.env.EMERGENCY_ALERT_EMAIL);
+    }
+
+    if (userEmail && userEmail.includes('@') && !emergencyRecipients.includes(userEmail)) {
+      emergencyRecipients.push(userEmail);
+    }
+
+    if (Array.isArray(guardianEmails)) {
+      for (const gEmail of guardianEmails) {
+        if (gEmail && typeof gEmail === 'string' && gEmail.includes('@') && !emergencyRecipients.includes(gEmail)) {
+          emergencyRecipients.push(gEmail);
+        }
+      }
     }
 
     // Include registered user email if userId is available

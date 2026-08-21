@@ -18,6 +18,7 @@ class _GuardianContactsScreenState extends State<GuardianContactsScreen> {
   void _showAddContactDialog(BuildContext context) {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
     String relation = 'Family';
 
     showDialog(
@@ -49,7 +50,19 @@ class _GuardianContactsScreenState extends State<GuardianContactsScreen> {
                 keyboardType: TextInputType.phone,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  labelText: 'Phone Number',
+                  labelText: 'Phone Number (SMS Broadcast)',
+                  filled: true,
+                  fillColor: AppTheme.surface,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Email Address (Live GPS Alert Email)',
                   filled: true,
                   fillColor: AppTheme.surface,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -66,6 +79,7 @@ class _GuardianContactsScreenState extends State<GuardianContactsScreen> {
               onPressed: () {
                 final name = nameCtrl.text.trim();
                 final phone = phoneCtrl.text.trim();
+                final email = emailCtrl.text.trim();
                 if (name.isNotEmpty && phone.isNotEmpty) {
                   final provider = Provider.of<ContactsProvider>(context, listen: false);
                   provider.addContact(
@@ -73,6 +87,7 @@ class _GuardianContactsScreenState extends State<GuardianContactsScreen> {
                       id: 'c-${DateTime.now().millisecondsSinceEpoch}',
                       name: name,
                       phone: phone,
+                      email: email.isNotEmpty ? email : null,
                       relation: relation,
                       isPrimary: true,
                     ),
@@ -135,7 +150,7 @@ class _GuardianContactsScreenState extends State<GuardianContactsScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'These contacts receive live GPS links & SMS immediately when you trigger SOS.',
+                          'These guardians receive high-priority Email & SMS with your live GPS location during emergencies.',
                           style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textSecondary),
                         ),
                       ],
@@ -161,7 +176,7 @@ class _GuardianContactsScreenState extends State<GuardianContactsScreen> {
                       latitude: 28.6139,
                       longitude: 77.2090,
                       userName: 'Priya',
-                      customMessage: '?? TEST ALERT: JanSuraksha AI guardian network test broadcast. All systems operational.',
+                      customMessage: '🔔 TEST ALERT: JanSuraksha AI guardian network test broadcast. All systems operational.',
                     );
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Test alert sent to guardian circle!'), backgroundColor: AppTheme.safeEmerald),
@@ -216,7 +231,7 @@ class _GuardianContactsScreenState extends State<GuardianContactsScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '${c.phone} • ${c.relation}',
+                              '${c.phone}${c.email != null ? ' • ${c.email}' : ''}',
                               style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary),
                             ),
                           ],

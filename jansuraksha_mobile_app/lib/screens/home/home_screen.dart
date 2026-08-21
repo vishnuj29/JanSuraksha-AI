@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:jansuraksha_mobile_app/providers/auth_provider.dart';
@@ -33,25 +33,31 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final voice = Provider.of<VoiceProvider>(context, listen: false);
       final sos = Provider.of<SosProvider>(context, listen: false);
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final contacts = Provider.of<ContactsProvider>(context, listen: false);
 
       voice.initializeTriggers(
         onTrigger: (keyword) {
           if (!sos.isSosActive && !sos.isCountingDown) {
             sos.initiateSos(
-              triggerType: 'Hands-Free Voice Detection',
+              triggerType: 'Hands-Free Voice Detection ($keyword)',
               triggerWord: keyword,
+              auth: auth,
+              contacts: contacts,
             );
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Row(
                   children: [
-                    const Icon(Icons.mic, color: Colors.white, size: 20),
+                    const Icon(Icons.mic_rounded, color: Colors.white, size: 20),
                     const SizedBox(width: 10),
-                    Text('Emergency voice trigger detected: "$keyword"!'),
+                    Expanded(
+                      child: Text('Emergency voice trigger detected: "$keyword"! Alerts dispatched to email & SMS.'),
+                    ),
                   ],
                 ),
                 backgroundColor: AppTheme.primaryRed,
-                duration: const Duration(seconds: 4),
+                duration: const Duration(seconds: 5),
               ),
             );
           }
@@ -109,7 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         Text(
-                          'Broadcast sent via Cloud + Offline SMS',
+                          'Live GPS Coordinates sent via Email & SMS',
                           style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textSecondary),
                         ),
                       ],
@@ -288,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         const Icon(Icons.battery_charging_full_rounded, color: AppTheme.safeEmerald, size: 14),
                         const SizedBox(width: 4),
-                        Text('88% GPS', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
+                        Text('94% GPS', style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
@@ -302,7 +308,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 countdownSeconds: sos.countdownSeconds,
                 onCancelCountdown: sos.cancelCountdown,
                 onTap: () {
-                  sos.initiateSos(triggerType: 'One-Tap Manual SOS');
+                  sos.initiateSos(
+                    triggerType: 'One-Tap Manual SOS',
+                    auth: auth,
+                    contacts: contacts,
+                  );
                   Future.delayed(const Duration(milliseconds: 5200), () {
                     if (!context.mounted) return;
                     if (sos.isSosActive) {

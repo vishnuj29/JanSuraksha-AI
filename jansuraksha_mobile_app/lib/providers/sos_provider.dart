@@ -4,6 +4,8 @@ import '../models/sos_alert_model.dart';
 import '../services/api_service.dart';
 import '../services/location_service.dart';
 import '../services/offline_sms_service.dart';
+import 'contacts_provider.dart';
+import 'auth_provider.dart';
 
 class SosProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -30,7 +32,12 @@ class SosProvider with ChangeNotifier {
     locationService.getCurrentLocation();
   }
 
-  void initiateSos({String triggerType = 'Manual SOS', String? triggerWord}) {
+  void initiateSos({
+    String triggerType = 'Manual SOS',
+    String? triggerWord,
+    AuthProvider? auth,
+    ContactsProvider? contacts,
+  }) {
     if (_isSosActive || _isCountingDown) return;
 
     _sosTriggerType = triggerType;
@@ -46,7 +53,7 @@ class SosProvider with ChangeNotifier {
       } else {
         _countdownTimer?.cancel();
         _isCountingDown = false;
-        _dispatchSos(triggerType, triggerWord);
+        _dispatchSos(triggerType, triggerWord, auth: auth, contacts: contacts);
       }
     });
   }
@@ -59,7 +66,12 @@ class SosProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _dispatchSos(String type, String? triggerWord) async {
+  Future<void> _dispatchSos(
+    String type,
+    String? triggerWord, {
+    AuthProvider? auth,
+    ContactsProvider? contacts,
+  }) async {
     _isSosActive = true;
     _activeResponders = 1;
     notifyListeners();
@@ -67,11 +79,17 @@ class SosProvider with ChangeNotifier {
     final pos = await locationService.getCurrentLocation();
     final lat = pos?.latitude ?? 28.6139;
     final lng = pos?.longitude ?? 77.2090;
+    final userName = auth?.user?.name ?? 'Priya Sharma';
+    final userPhone = auth?.user?.phone ?? '+91 98765 43210';
+    final userEmail = auth?.user?.email;
+
+    final guardianEmails = contacts?.contacts.map((c) => c.email).whereType<String>().toList() ?? [];
+    final guardianPhones = contacts?.primaryPhoneNumbers ?? ['+91 98765 43210', '112'];
 
     _activeAlert = SosAlertModel(
       id: 'sos-${DateTime.now().millisecondsSinceEpoch}',
-      user: 'Priya Sharma',
-      phone: '+91 98765 43210',
+      user: userName,
+      phone: userPhone,
       type: type,
       time: 'Just now',
       location: locationService.currentAddress,
@@ -84,16 +102,31 @@ class SosProvider with ChangeNotifier {
 
     notifyListeners();
 
+    // 1. Send Enterprise SOS to Cloud (Sends rich HTML Email with Live Google Maps link to user + all guardians)
     _apiService.triggerSos(
-      user: _activeAlert!.user,
-      phone: _activeAlert!.phone,
-      location: _activeAlert!.location,
+      user: userName,
+      phone: userPhone,
+      userEmail: userEmail,
+      guardianEmails: guardianEmails,
+      location: locationService.currentAddress,
       latitude: lat,
       longitude: lng,
       type: type,
       triggerWord: triggerWord,
     );
 
+    // 2. Dispatch Direct Offline Telephony SMS with live GPS link to all guardian numbers
+    if (guardianPhones.isNotEmpty) {
+      OfflineSmsService.sendEmergencySms(
+        phoneNumbers: guardianPhones,
+        latitude: lat,
+        longitude: lng,
+        userName: userName,
+        customMessage: '🚨 CRITICAL EMERGENCY SOS: $userName needs immediate help! Trigger: $type. Live GPS tracking: https://maps.google.com/?q=$lat,$lng',
+      );
+    }
+
+    // 3. Dynamic responder counter
     _responderTimer?.cancel();
     _responderTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
       if (_isSosActive && _activeResponders < 7) {
