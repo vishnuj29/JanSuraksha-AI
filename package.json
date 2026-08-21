@@ -17,6 +17,7 @@
     "lint:fix": "eslint . --fix",
     "type-check": "tsc --noEmit",
     "mysql:users": "node scripts/view-mysql-users.js",
+    "mysql:sync": "node scripts/sync-vercel-to-mysql.js",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,md}\"",
     "clean": "rm -rf dist node_modules/.vite",
     "reset": "npm run clean && npm install"
