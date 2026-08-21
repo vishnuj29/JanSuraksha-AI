@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express';
-import Twilio from 'twilio';
 import { dbStore } from '../../services/dbStore';
 import { emailService } from '../../services/emailService';
 
@@ -21,32 +20,6 @@ interface SOSRequest {
 const validatePhone = (phone: string): boolean => {
   const phoneRegex = /^(\+91|91)?[6-9]\d{9}$/;
   return phoneRegex.test(phone.replace(/\s+/g, ''));
-};
-
-const sendWhatsAppAlert = async (phone: string, message: string): Promise<string> => {
-  const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-  const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-  const TWILIO_PHONE = process.env.TWILIO_WHATSAPP_PHONE;
-
-  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE) {
-    console.log('[SOS TWILIO DEV] Twilio credentials not set. Logging alert:', { phone, message });
-    return `MOCK_TWILIO_${Date.now()}`;
-  }
-
-  try {
-    const client = new Twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-    const payload = {
-      from: TWILIO_PHONE.startsWith('whatsapp:') ? TWILIO_PHONE : `whatsapp:${TWILIO_PHONE}`,
-      to: phone.startsWith('whatsapp:') ? phone : `whatsapp:${phone}`,
-      body: message,
-    };
-
-    const messageInstance = await client.messages.create(payload);
-    return messageInstance.sid || `ALERT_${Date.now()}`;
-  } catch (error) {
-    console.error('[SOS Twilio Error]:', error);
-    return `FALLBACK_${Date.now()}`;
-  }
 };
 
 export default async function handler(req: Request, res: Response) {
@@ -111,10 +84,7 @@ export default async function handler(req: Request, res: Response) {
       (locationMapUrl ? `*GPS Map:* ${locationMapUrl}\n\n` : '\n') +
       `Please check on this person immediately or dispatch responders!`;
 
-    // 1. Dispatch Twilio WhatsApp/SMS
-    const alertId = await sendWhatsAppAlert(phone, fullMessage);
-
-    // 2. Dispatch SMTP Emergency Alert Email to all guardian emails, user email, and admin
+    // Dispatch SMTP Emergency Alert Email to all guardian emails, user email, and admin
     const emergencyRecipients: string[] = [];
     if (process.env.SMTP_USER && process.env.SMTP_USER.includes('@')) {
       emergencyRecipients.push(process.env.SMTP_USER);

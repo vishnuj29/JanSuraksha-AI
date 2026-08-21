@@ -1233,29 +1233,6 @@ async function handler9(req, res) {
 }
 
 // src/server/api/sos/POST.ts
-import Twilio from "twilio";
-var sendWhatsAppAlert = async (phone, message) => {
-  const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-  const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-  const TWILIO_PHONE = process.env.TWILIO_WHATSAPP_PHONE;
-  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE) {
-    console.log("[SOS TWILIO DEV] Twilio credentials not set. Logging alert:", { phone, message });
-    return `MOCK_TWILIO_${Date.now()}`;
-  }
-  try {
-    const client = new Twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-    const payload = {
-      from: TWILIO_PHONE.startsWith("whatsapp:") ? TWILIO_PHONE : `whatsapp:${TWILIO_PHONE}`,
-      to: phone.startsWith("whatsapp:") ? phone : `whatsapp:${phone}`,
-      body: message
-    };
-    const messageInstance = await client.messages.create(payload);
-    return messageInstance.sid || `ALERT_${Date.now()}`;
-  } catch (error) {
-    console.error("[SOS Twilio Error]:", error);
-    return `FALLBACK_${Date.now()}`;
-  }
-};
 async function handler10(req, res) {
   const startTime = Date.now();
   try {
@@ -1303,7 +1280,6 @@ async function handler10(req, res) {
 ` : "") + (locationMapUrl ? `*GPS Map:* ${locationMapUrl}
 
 ` : "\n") + `Please check on this person immediately or dispatch responders!`;
-    const alertId = await sendWhatsAppAlert(phone, fullMessage);
     const emergencyRecipients = [];
     if (process.env.SMTP_USER && process.env.SMTP_USER.includes("@")) {
       emergencyRecipients.push(process.env.SMTP_USER);
