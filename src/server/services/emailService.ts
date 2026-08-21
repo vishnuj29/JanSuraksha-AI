@@ -147,6 +147,13 @@ class EmailService {
         const info = await transporter.sendMail({
           from: fromAddress,
           to: toEmail,
+          replyTo: 'ec23019@glbitm.ac.in',
+          priority: 'high',
+          headers: {
+            'X-Priority': '1',
+            'X-MSMail-Priority': 'High',
+            'Importance': 'High',
+          },
           subject: `🔐 JanSuraksha AI — Login Verification Code: ${otp}`,
           text: `Your JanSuraksha AI login verification code is: ${otp}. It expires in 10 minutes. Do not share this code.`,
           html: htmlContent,
@@ -240,6 +247,13 @@ class EmailService {
         const info = await transporter.sendMail({
           from: fromAddress,
           to: toEmail,
+          replyTo: 'ec23019@glbitm.ac.in',
+          priority: 'high',
+          headers: {
+            'X-Priority': '1',
+            'X-MSMail-Priority': 'High',
+            'Importance': 'High',
+          },
           subject: `🔐 JanSuraksha AI — Verify Your Email: ${otp}`,
           text: `Your JanSuraksha AI registration verification code is: ${otp}. It expires in 10 minutes.`,
           html: htmlContent,
