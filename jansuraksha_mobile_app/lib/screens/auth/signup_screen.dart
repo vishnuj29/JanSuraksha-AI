@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
@@ -21,7 +21,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _otpController = TextEditingController();
 
   bool _isOtpStep = false;
-  bool _useOtpVerification = false;
+  bool _useOtpVerification = true;
 
   @override
   void dispose() {
@@ -58,29 +58,16 @@ class _SignupScreenState extends State<SignupScreen> {
 
     final auth = Provider.of<AuthProvider>(context, listen: false);
 
-    if (_useOtpVerification) {
-      final res = await auth.requestOtp(email, name, phone, password);
-      if (res['success'] == true) {
-        setState(() => _isOtpStep = true);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Verification code dispatched to $email'), backgroundColor: AppTheme.safeEmerald),
-          );
-        }
-      } else {
-        _showError(res['message'] ?? 'Failed to send verification code');
+    final res = await auth.requestOtp(email, name, phone, password);
+    if (res['success'] == true) {
+      setState(() => _isOtpStep = true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Verification code dispatched to $email'), backgroundColor: AppTheme.safeEmerald),
+        );
       }
     } else {
-      final success = await auth.signup(name, email, phone, password);
-      if (!mounted) return;
-      if (success) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-          (route) => false,
-        );
-      } else {
-        _showError(auth.errorMessage ?? 'Registration failed');
-      }
+      _showError(res['message'] ?? 'Failed to send verification code');
     }
   }
 

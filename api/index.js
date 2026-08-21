@@ -1310,16 +1310,19 @@ async function handler10(req, res) {
       }
     }
     if (emergencyRecipients.length > 0) {
-      emailService.sendSOSEmergencyEmail(emergencyRecipients, {
-        userName,
-        phone,
-        locationUrl: locationMapUrl,
-        address: locationDisplay,
-        triggerWord,
-        timestamp: timeStr
-      }).then((res2) => {
-        console.log(`[SOS EMAIL DISPATCH] Sent to [${emergencyRecipients.join(", ")}]. Result:`, res2);
-      }).catch((err) => console.error("[SOS Email Dispatch Error]:", err));
+      try {
+        const emailResult = await emailService.sendSOSEmergencyEmail(emergencyRecipients, {
+          userName,
+          phone,
+          locationUrl: locationMapUrl,
+          address: locationDisplay,
+          triggerWord: triggerWord || "Voice / Manual SOS",
+          timestamp: timeStr
+        });
+        console.log(`[SOS EMAIL DISPATCH] Sent to [${emergencyRecipients.join(", ")}]. Result:`, emailResult);
+      } catch (emailErr) {
+        console.error("[SOS Email Dispatch Error]:", emailErr);
+      }
     }
     const responseTime = Date.now() - startTime;
     console.log(`[SOS ALERT DISPATCHED] ID: ${alertRecord.id} in ${responseTime}ms for ${userName}`);

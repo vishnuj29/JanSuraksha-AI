@@ -81,53 +81,28 @@ export default function SignupPage() {
 
     setLoading(true);
 
-    if (useOtpVerification) {
-      // Send real SMTP Email OTP
-      try {
-        const response = await api.auth.registerInitiate({
-          name: name.trim(),
-          email: email.trim().toLowerCase(),
-          password,
-          phone: phone.trim(),
-        });
+    // Send real SMTP Email OTP (Mandatory verification)
+    try {
+      const response = await api.auth.registerInitiate({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        phone: phone.trim(),
+      });
 
-        if (response.success) {
-          toast.success(response.message || `Verification code sent to ${email}!`);
-          setStep('otp');
-          setResendCountdown(60);
-          setOtpValues(['', '', '', '', '', '']);
-        } else {
-          toast.error(response.message || 'Registration failed');
-        }
-      } catch (err: any) {
-        console.error('Registration initiate error:', err);
-        toast.error(err.message || 'Failed to dispatch verification email');
-      } finally {
-        setLoading(false);
+      if (response.success) {
+        toast.success(response.message || `Verification code sent to ${email}!`);
+        setStep('otp');
+        setResendCountdown(60);
+        setOtpValues(['', '', '', '', '', '']);
+      } else {
+        toast.error(response.message || 'Registration failed');
       }
-    } else {
-      // Direct Instant Registration
-      try {
-        const response = await api.auth.register({
-          name: name.trim(),
-          email: email.trim().toLowerCase(),
-          password,
-          phone: phone.trim(),
-        });
-
-        if (response.success && response.token) {
-          setAuth(response.user, response.token);
-          toast.success(`🎉 Welcome to JanSuraksha AI, ${response.user?.name || name}!`);
-          navigate('/dashboard');
-        } else {
-          toast.error(response.message || 'Registration failed');
-        }
-      } catch (err: any) {
-        console.error('Registration error:', err);
-        toast.error(err.message || 'Registration failed');
-      } finally {
-        setLoading(false);
-      }
+    } catch (err: any) {
+      console.error('Registration initiate error:', err);
+      toast.error(err.message || 'Failed to dispatch verification email');
+    } finally {
+      setLoading(false);
     }
   };
 

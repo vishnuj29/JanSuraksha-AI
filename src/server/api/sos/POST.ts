@@ -120,19 +120,19 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (emergencyRecipients.length > 0) {
-      emailService
-        .sendSOSEmergencyEmail(emergencyRecipients, {
+      try {
+        const emailResult = await emailService.sendSOSEmergencyEmail(emergencyRecipients, {
           userName,
           phone,
           locationUrl: locationMapUrl,
           address: locationDisplay,
-          triggerWord,
+          triggerWord: triggerWord || 'Voice / Manual SOS',
           timestamp: timeStr,
-        })
-        .then((res) => {
-          console.log(`[SOS EMAIL DISPATCH] Sent to [${emergencyRecipients.join(', ')}]. Result:`, res);
-        })
-        .catch((err) => console.error('[SOS Email Dispatch Error]:', err));
+        });
+        console.log(`[SOS EMAIL DISPATCH] Sent to [${emergencyRecipients.join(', ')}]. Result:`, emailResult);
+      } catch (emailErr) {
+        console.error('[SOS Email Dispatch Error]:', emailErr);
+      }
     }
 
     const responseTime = Date.now() - startTime;

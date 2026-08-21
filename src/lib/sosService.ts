@@ -36,11 +36,19 @@ export interface SOSResponse {
 export const triggerSOSAlert = async (payload: SOSPayload): Promise<SOSResponse> => {
   try {
     const user = getCurrentUser();
+    let storedGuardianEmails: string[] = [];
+    try {
+      const stored = localStorage.getItem('guardianEmails');
+      if (stored) storedGuardianEmails = JSON.parse(stored);
+    } catch {}
+
     const result = await api.sos.trigger({
       ...payload,
       user: payload.user || user?.name || 'JanSuraksha User',
       userId: payload.userId || user?.id,
       phone: payload.phone || user?.phone || '+919876543210',
+      userEmail: user?.email || localStorage.getItem('userEmail') || undefined,
+      guardianEmails: storedGuardianEmails,
       timestamp: payload.timestamp || new Date().toISOString(),
     });
 
@@ -77,6 +85,10 @@ export const sendSOSEmergency = async (
       }
     } catch (locErr) {
       console.warn('[SOS Service] Location resolution warning:', locErr);
+    }
+
+    if (!locationMapUrl && coords) {
+      locationMapUrl = `https://maps.google.com/?q=${coords.latitude},${coords.longitude}`;
     }
 
     // 2. Dispatch SOS alert
