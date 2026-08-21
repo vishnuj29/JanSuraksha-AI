@@ -270,12 +270,37 @@ function OverviewTab() {
 }
 
 function UsersTab() {
+  const [usersList, setUsersList] = useState<User[]>(USERS);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
-  const filtered = USERS.filter(u => {
-    const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
+  useEffect(() => {
+    api.admin
+      .getUsers()
+      .then((res) => {
+        if (res.success && Array.isArray(res.users) && res.users.length > 0) {
+          const mapped: User[] = res.users.map((u: any, idx: number) => ({
+            id: u.id || `U00${idx + 1}`,
+            name: u.name || 'JanSuraksha User',
+            email: u.email,
+            phone: u.phone || '+91 98765 43210',
+            plan: u.plan || (u.role === 'admin' ? 'Premium' : 'Free'),
+            status: u.status || 'Active',
+            joined: u.joinedDate || '2026',
+            lastSeen: u.role === 'admin' ? 'Online Now' : 'Active Today',
+            sosCount: u.sosCount || 0,
+            location: u.location || 'India',
+          }));
+          setUsersList(mapped);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const filtered = usersList.filter((u) => {
+    const matchSearch =
+      u.name.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === 'All' || u.status === filterStatus;
     return matchSearch && matchStatus;
@@ -337,7 +362,12 @@ function UsersTab() {
                         {user.name.split(' ').map(n => n[0]).join('')}
                       </div>
                       <div>
-                        <div className="text-white text-sm font-semibold">{user.name}</div>
+                        <div className="text-white text-sm font-semibold flex items-center gap-2">
+                          {user.name}
+                          {user.email === 'ec23019@glbitm.ac.in' && (
+                            <span className="bg-red-500/20 text-red-400 border border-red-500/40 text-[9px] px-1.5 py-0.2 rounded font-bold">ADMIN</span>
+                          )}
+                        </div>
                         <div className="text-slate-500 text-xs">{user.email}</div>
                       </div>
                     </div>
@@ -375,12 +405,7 @@ function UsersTab() {
           </table>
         </div>
         <div className="px-4 py-3 border-t border-white/6 flex items-center justify-between">
-          <span className="text-slate-500 text-xs">{filtered.length} of {USERS.length} users</span>
-          <div className="flex items-center gap-1">
-            {['1', '2', '3', '...', '47'].map(p => (
-              <button key={p} className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all ${p === '1' ? 'bg-red-600 text-white' : 'bg-white/5 text-slate-400 hover:text-white'}`}>{p}</button>
-            ))}
-          </div>
+          <span className="text-slate-500 text-xs">{filtered.length} of {usersList.length} users</span>
         </div>
       </div>
 
@@ -427,14 +452,6 @@ function UsersTab() {
                       </div>
                     ))}
                   </div>
-                  <div className="flex gap-2 pt-1">
-                    <button className="flex-1 flex items-center justify-center gap-2 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-300 font-semibold py-2.5 rounded-xl transition-all text-sm">
-                      <Ban size={14} /> Suspend
-                    </button>
-                    <button className="flex-1 flex items-center justify-center gap-2 bg-white/6 hover:bg-white/10 border border-white/10 text-slate-300 font-semibold py-2.5 rounded-xl transition-all text-sm">
-                      <Mail size={14} /> Email User
-                    </button>
-                  </div>
                 </div>
               </div>
             </motion.div>
@@ -446,18 +463,40 @@ function UsersTab() {
 }
 
 function AlertsTab() {
+  const [alertsList, setAlertsList] = useState<SOSAlert[]>(SOS_ALERTS);
   const [filter, setFilter] = useState('All');
-  const filtered = filter === 'All' ? SOS_ALERTS : SOS_ALERTS.filter(a => a.status === filter);
+
+  useEffect(() => {
+    api.admin
+      .getAlerts()
+      .then((res) => {
+        if (res.success && Array.isArray(res.alerts) && res.alerts.length > 0) {
+          const mapped: SOSAlert[] = res.alerts.map((a: any, idx: number) => ({
+            id: a.id || `A00${idx + 1}`,
+            user: a.user || 'JanSuraksha User',
+            type: a.type || 'Voice Trigger',
+            time: a.time || 'Just now',
+            location: a.location || 'Live Area',
+            status: a.status || 'Active',
+            responders: a.responders || 3,
+          }));
+          setAlertsList(mapped);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const filtered = filter === 'All' ? alertsList : alertsList.filter(a => a.status === filter);
 
   return (
     <div className="space-y-4">
       {/* Summary row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total Today', value: '34', color: 'text-white', bg: 'bg-white/5' },
-          { label: 'Active Now', value: '2', color: 'text-red-400', bg: 'bg-red-500/10' },
-          { label: 'Resolved', value: '28', color: 'text-green-400', bg: 'bg-green-500/10' },
-          { label: 'Escalated', value: '1', color: 'text-orange-400', bg: 'bg-orange-500/10' },
+          { label: 'Total Alerts', value: String(alertsList.length), color: 'text-white', bg: 'bg-white/5' },
+          { label: 'Active Now', value: String(alertsList.filter(a => a.status === 'Active' || a.status === 'Escalated').length), color: 'text-red-400', bg: 'bg-red-500/10' },
+          { label: 'Resolved', value: String(alertsList.filter(a => a.status === 'Resolved').length), color: 'text-green-400', bg: 'bg-green-500/10' },
+          { label: 'Escalated', value: String(alertsList.filter(a => a.status === 'Escalated').length), color: 'text-orange-400', bg: 'bg-orange-500/10' },
         ].map(s => (
           <div key={s.label} className={`p-4 rounded-2xl ${s.bg} border border-white/8 text-center`}>
             <div className={`text-2xl font-black ${s.color}`} style={{ fontFamily: 'var(--font-heading)' }}>{s.value}</div>
@@ -500,9 +539,15 @@ function AlertsTab() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                <button className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"><Eye size={13} /></button>
-                <button className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"><Download size={13} /></button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <a
+                  href={`https://www.google.com/maps?q=${encodeURIComponent(alert.location)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-xl bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-300 text-xs font-semibold flex items-center gap-1 transition-all"
+                >
+                  <MapPin size={12} /> View Map
+                </a>
               </div>
             </div>
           </motion.div>
@@ -511,6 +556,8 @@ function AlertsTab() {
     </div>
   );
 }
+
+
 
 function VaultTab() {
   const typeIcon = { photo: Camera, video: Activity, audio: Mic };

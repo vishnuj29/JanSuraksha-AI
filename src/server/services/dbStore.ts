@@ -121,15 +121,15 @@ class DBStore {
     const defaultUsers: DBUser[] = [
       {
         id: 'u-admin-1',
-        name: 'JanSuraksha Admin',
-        email: 'admin@jansuraksha.ai',
+        name: 'Vishnu Jaiswal (Admin)',
+        email: 'ec23019@glbitm.ac.in',
         passwordHash: defaultPasswordHash,
-        phone: '+91 98765 43210',
+        phone: '+91 88740 47462',
         role: 'admin',
         plan: 'Premium',
-        safetyScore: 98,
-        avatar: 'JA',
-        location: 'New Delhi, DL',
+        safetyScore: 99,
+        avatar: 'VJ',
+        location: 'Greater Noida, UP',
         joinedDate: 'Jan 01, 2026',
       },
       {
@@ -330,15 +330,16 @@ class DBStore {
       .toUpperCase()
       .slice(0, 2) || 'JS';
 
+    const isAdmin = emailKey === 'ec23019@glbitm.ac.in' || emailKey === 'admin@jansuraksha.ai';
     const newUser: DBUser = {
       id,
       name: userData.name.trim(),
       email: emailKey,
       passwordHash,
       phone: userData.phone.trim(),
-      role: 'user',
-      plan: 'Free',
-      safetyScore: 78,
+      role: isAdmin ? 'admin' : 'user',
+      plan: isAdmin ? 'Premium' : 'Free',
+      safetyScore: isAdmin ? 99 : 78,
       avatar: initials,
       location: 'Local Area',
       joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),

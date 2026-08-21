@@ -28,6 +28,11 @@ export default async function handler(req: Request, res: Response) {
       return res.status(400).json({ success: false, message: 'Invalid or expired OTP code. Please try again.' });
     }
 
+    const isAdmin = user.email.toLowerCase() === 'ec23019@glbitm.ac.in' || user.email.toLowerCase() === 'admin@jansuraksha.ai';
+    if (isAdmin && user.role !== 'admin') {
+      user.role = 'admin';
+    }
+
     // Generate JWT token
     const token = dbStore.generateToken(user);
 
@@ -36,8 +41,8 @@ export default async function handler(req: Request, res: Response) {
       name: user.name,
       email: user.email,
       phone: user.phone,
-      role: user.role,
-      plan: user.plan,
+      role: isAdmin ? 'admin' : user.role,
+      plan: isAdmin ? 'Premium' : user.plan,
       safetyScore: user.safetyScore,
       avatar: user.avatar,
       location: user.location,

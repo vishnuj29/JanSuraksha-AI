@@ -27,15 +27,15 @@ var DBStore = class {
     const defaultUsers = [
       {
         id: "u-admin-1",
-        name: "JanSuraksha Admin",
-        email: "admin@jansuraksha.ai",
+        name: "Vishnu Jaiswal (Admin)",
+        email: "ec23019@glbitm.ac.in",
         passwordHash: defaultPasswordHash,
-        phone: "+91 98765 43210",
+        phone: "+91 88740 47462",
         role: "admin",
         plan: "Premium",
-        safetyScore: 98,
-        avatar: "JA",
-        location: "New Delhi, DL",
+        safetyScore: 99,
+        avatar: "VJ",
+        location: "Greater Noida, UP",
         joinedDate: "Jan 01, 2026"
       },
       {
@@ -212,15 +212,16 @@ var DBStore = class {
     const id = `u_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const passwordHash = bcryptjs.hashSync(userData.password, 10);
     const initials = userData.name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "JS";
+    const isAdmin = emailKey === "ec23019@glbitm.ac.in" || emailKey === "admin@jansuraksha.ai";
     const newUser = {
       id,
       name: userData.name.trim(),
       email: emailKey,
       passwordHash,
       phone: userData.phone.trim(),
-      role: "user",
-      plan: "Free",
-      safetyScore: 78,
+      role: isAdmin ? "admin" : "user",
+      plan: isAdmin ? "Premium" : "Free",
+      safetyScore: isAdmin ? 99 : 78,
       avatar: initials,
       location: "Local Area",
       joinedDate: (/* @__PURE__ */ new Date()).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
@@ -936,14 +937,18 @@ async function handler2(req, res) {
     if (!isValid) {
       return res.status(400).json({ success: false, message: "Invalid or expired OTP code. Please try again." });
     }
+    const isAdmin = user.email.toLowerCase() === "ec23019@glbitm.ac.in" || user.email.toLowerCase() === "admin@jansuraksha.ai";
+    if (isAdmin && user.role !== "admin") {
+      user.role = "admin";
+    }
     const token = dbStore.generateToken(user);
     const safeUser = {
       id: user.id,
       name: user.name,
       email: user.email,
       phone: user.phone,
-      role: user.role,
-      plan: user.plan,
+      role: isAdmin ? "admin" : user.role,
+      plan: isAdmin ? "Premium" : user.plan,
       safetyScore: user.safetyScore,
       avatar: user.avatar,
       location: user.location,
@@ -983,14 +988,18 @@ async function handler3(req, res) {
     if (!isMatch) {
       return res.status(401).json({ success: false, message: "Invalid email or password" });
     }
+    const isAdmin = user.email.toLowerCase() === "ec23019@glbitm.ac.in" || user.email.toLowerCase() === "admin@jansuraksha.ai";
+    if (isAdmin && user.role !== "admin") {
+      user.role = "admin";
+    }
     const token = dbStore.generateToken(user);
     const safeUser = {
       id: user.id,
       name: user.name,
       email: user.email,
       phone: user.phone,
-      role: user.role,
-      plan: user.plan,
+      role: isAdmin ? "admin" : user.role,
+      plan: isAdmin ? "Premium" : user.plan,
       safetyScore: user.safetyScore,
       avatar: user.avatar,
       location: user.location,
