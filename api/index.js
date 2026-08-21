@@ -869,13 +869,14 @@ async function handler(req, res) {
       });
     }
     console.log(`[AUTH] Login OTP dispatched to ${cleanEmail}. OTP: [${otp}]`);
-    const maskedEmail = user.email.replace(/^(.)(.*)(@.*)$/, (_, first, middle, domain) => {
+    const userEmail = user?.email || cleanEmail;
+    const maskedEmail = userEmail.replace(/^(.)(.*)(@.*)$/, (_, first, middle, domain) => {
       return first + "*".repeat(Math.max(1, middle.length)) + domain;
     });
     return res.status(200).json({
       success: true,
       message: `A 6-digit verification code has been sent to ${maskedEmail}`,
-      email: user.email,
+      email: userEmail,
       step: "otp"
     });
   } catch (error) {
