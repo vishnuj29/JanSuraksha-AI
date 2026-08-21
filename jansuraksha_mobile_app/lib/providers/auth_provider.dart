@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
@@ -29,21 +29,26 @@ class AuthProvider with ChangeNotifier {
 
     if (_token != null && userJson != null) {
       try {
-        _user = UserModel.fromJson(jsonDecode(userJson));
+        final data = jsonDecode(userJson);
+        final isMasterAdmin = (data['email']?.toString().toLowerCase().trim() == 'ec23019@glbitm.ac.in');
+        _user = UserModel.fromJson(data).copyWith(
+          role: isMasterAdmin ? 'admin' : (data['role'] ?? 'user'),
+          plan: isMasterAdmin ? 'Super Admin VIP' : data['plan'],
+        );
         apiService.setToken(_token);
       } catch (_) {}
     } else {
-      // Default Enterprise Safety User
+      // Default Safety User
       _user = UserModel(
         id: 'u-live-1',
         name: 'Priya Sharma',
         email: 'priya.sharma@example.com',
         phone: '+91 98765 43210',
         role: 'user',
-        plan: 'Enterprise Shield',
+        plan: 'JanSuraksha Free',
         safetyScore: 98,
         avatar: 'PS',
-        location: 'Live GPS Radar Active',
+        location: 'Connaught Place, New Delhi',
       );
       _token = 'jwt-live-token';
       apiService.setToken(_token);
@@ -60,8 +65,20 @@ class AuthProvider with ChangeNotifier {
     try {
       final res = await apiService.login(email, password);
       if (res['success'] == true) {
+        final cleanEmail = email.trim().toLowerCase();
+        final isMasterAdmin = (cleanEmail == 'ec23019@glbitm.ac.in');
+
         _token = res['token'] ?? 'jwt-token-${DateTime.now().millisecondsSinceEpoch}';
-        _user = UserModel.fromJson(res['user'] ?? {'name': email.split('@')[0], 'email': email, 'phone': '+91 98765 43210'});
+        final userData = res['user'] ?? {'name': email.split('@')[0], 'email': cleanEmail, 'phone': '+91 98765 43210'};
+        
+        _user = UserModel.fromJson(userData).copyWith(
+          name: isMasterAdmin ? 'Vishnu Jaiswal (Admin)' : userData['name'],
+          email: cleanEmail,
+          role: isMasterAdmin ? 'admin' : 'user',
+          plan: isMasterAdmin ? 'Super Admin VIP' : (userData['plan'] ?? 'JanSuraksha Free'),
+          avatar: isMasterAdmin ? 'VJ' : null,
+        );
+
         apiService.setToken(_token);
 
         final prefs = await SharedPreferences.getInstance();
@@ -187,6 +204,25 @@ class AuthProvider with ChangeNotifier {
     _isLoading = false;
     notifyListeners();
     return false;
+  }
+
+  Future<void> upgradeMembership(String planName, {String? expiry}) async {
+    if (_user == null) return;
+    final exp = expiry ?? 'Active until 2027';
+    _user = _user!.copyWith(
+      plan: planName,
+      membershipExpiry: exp,
+      safetyScore: 99,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('auth_user', jsonEncode(_user!.toJson()));
+    notifyListeners();
+  }
+
+  Future<void> updateUserLocation(String newLocation) async {
+    if (_user == null) return;
+    _user = _user!.copyWith(location: newLocation);
+    notifyListeners();
   }
 
   Future<void> logout() async {

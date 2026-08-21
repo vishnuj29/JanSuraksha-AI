@@ -6,6 +6,7 @@ import '../services/location_service.dart';
 import '../services/offline_sms_service.dart';
 import 'contacts_provider.dart';
 import 'auth_provider.dart';
+import 'evidence_vault_provider.dart';
 
 class SosProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -37,13 +38,31 @@ class SosProvider with ChangeNotifier {
     String? triggerWord,
     AuthProvider? auth,
     ContactsProvider? contacts,
+    EvidenceVaultProvider? evidenceVault,
   }) {
     if (_isSosActive || _isCountingDown) return;
 
     _sosTriggerType = triggerType;
     _isCountingDown = true;
-    _countdownSeconds = 5;
+    _countdownSeconds = 4;
     notifyListeners();
+
+    // Instantly capture initial evidence snapshot and audio buffer
+    if (evidenceVault != null) {
+      final pos = locationService.currentPosition;
+      final lat = pos?.latitude ?? 28.6139;
+      final lng = pos?.longitude ?? 77.2090;
+      final addr = locationService.currentAddress.isNotEmpty
+          ? locationService.currentAddress
+          : 'Connaught Place, New Delhi';
+
+      evidenceVault.recordAutoEvidence(
+        triggerWord: triggerWord ?? triggerType,
+        lat: lat,
+        lng: lng,
+        address: addr,
+      );
+    }
 
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -53,10 +72,18 @@ class SosProvider with ChangeNotifier {
       } else {
         _countdownTimer?.cancel();
         _isCountingDown = false;
-        _dispatchSos(triggerType, triggerWord, auth: auth, contacts: contacts);
+        _dispatchSos(
+          triggerType,
+          triggerWord,
+          auth: auth,
+          contacts: contacts,
+          evidenceVault: evidenceVault,
+        );
       }
     });
   }
+
+
 
   void cancelCountdown() {
     _countdownTimer?.cancel();
@@ -71,6 +98,7 @@ class SosProvider with ChangeNotifier {
     String? triggerWord, {
     AuthProvider? auth,
     ContactsProvider? contacts,
+    EvidenceVaultProvider? evidenceVault,
   }) async {
     _isSosActive = true;
     _activeResponders = 1;
@@ -79,11 +107,34 @@ class SosProvider with ChangeNotifier {
     final pos = await locationService.getCurrentLocation();
     final lat = pos?.latitude ?? 28.6139;
     final lng = pos?.longitude ?? 77.2090;
+    final address = locationService.currentAddress.isNotEmpty
+        ? locationService.currentAddress
+        : 'Connaught Place, New Delhi';
     final userName = auth?.user?.name ?? 'Priya Sharma';
     final userPhone = auth?.user?.phone ?? '+91 98765 43210';
-    final userEmail = auth?.user?.email;
+    final userEmail = auth?.user?.email ?? 'priya.sharma@example.com';
 
-    final guardianEmails = contacts?.contacts.map((c) => c.email).whereType<String>().toList() ?? [];
+    // Collect all family & guardian emails, PLUS Super Admin (ec23019@glbitm.ac.in), PLUS police responder desk
+    final guardianEmails = <String>[];
+    if (contacts != null) {
+      for (final c in contacts.contacts) {
+        if (c.email != null && c.email!.isNotEmpty) {
+          guardianEmails.add(c.email!);
+        }
+      }
+    }
+    // Super Admin Email (Always notified of all user emergencies)
+    if (!guardianEmails.contains('ec23019@glbitm.ac.in')) {
+      guardianEmails.add('ec23019@glbitm.ac.in');
+    }
+    // Police emergency desks
+    if (!guardianEmails.contains('112.police.response@gov.in')) {
+      guardianEmails.add('112.police.response@gov.in');
+    }
+    if (!guardianEmails.contains('police.delhi@gov.in')) {
+      guardianEmails.add('police.delhi@gov.in');
+    }
+
     final guardianPhones = contacts?.primaryPhoneNumbers ?? ['+91 98765 43210', '112'];
 
     _activeAlert = SosAlertModel(
@@ -92,7 +143,7 @@ class SosProvider with ChangeNotifier {
       phone: userPhone,
       type: type,
       time: 'Just now',
-      location: locationService.currentAddress,
+      location: address,
       latitude: lat,
       longitude: lng,
       status: 'Active',
@@ -102,7 +153,7 @@ class SosProvider with ChangeNotifier {
 
     notifyListeners();
 
-    // 1. Send Enterprise SOS to Cloud (Sends rich HTML Email with Live Google Maps link to user + all guardians)
+    // 1. Send Enterprise SOS via Cloud API (Dispatches rich HTML Email with Live GPS to Super Admin ec23019@glbitm.ac.in + family + police)
     try {
       await _apiService.triggerSos(
         user: userName,
@@ -113,7 +164,7 @@ class SosProvider with ChangeNotifier {
         latitude: lat,
         longitude: lng,
         type: type,
-        triggerWord: triggerWord,
+        triggerWord: triggerWord ?? (type.contains('Voice') ? type : 'Manual SOS'),
       );
     } catch (_) {}
 
@@ -124,14 +175,24 @@ class SosProvider with ChangeNotifier {
         latitude: lat,
         longitude: lng,
         userName: userName,
-        customMessage: '🚨 CRITICAL EMERGENCY SOS: $userName needs immediate help! Trigger: $type. Live GPS tracking: https://maps.google.com/?q=$lat,$lng',
+        customMessage: '🚨 CRITICAL EMERGENCY SOS: $userName needs immediate help! Trigger: $type. Live GPS tracking: https://maps.google.com/?q=$lat,$lng. Police 112 alerted.',
       );
     }
 
-    // 3. Dynamic responder counter
+    // 3. Automatically record evidence (Photos, Audios, Video stream, GPS Blackbox) into Vault
+    if (evidenceVault != null) {
+      evidenceVault.recordAutoEvidence(
+        triggerWord: triggerWord ?? type,
+        lat: lat,
+        lng: lng,
+        address: address,
+      );
+    }
+
+    // 4. Dynamic responder counter
     _responderTimer?.cancel();
-    _responderTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (_isSosActive && _activeResponders < 7) {
+    _responderTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (_isSosActive && _activeResponders < 8) {
         _activeResponders++;
         notifyListeners();
       } else {
@@ -162,3 +223,4 @@ class SosProvider with ChangeNotifier {
     );
   }
 }
+
