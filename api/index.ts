@@ -6,57 +6,57 @@ import path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 // Auth Handlers
-import loginInitiateHandler from '../src/server/api/auth/login-initiate/POST';
-import loginVerifyHandler from '../src/server/api/auth/login-verify/POST';
-import loginHandler from '../src/server/api/auth/login/POST';
-import registerInitiateHandler from '../src/server/api/auth/register-initiate/POST';
-import registerVerifyHandler from '../src/server/api/auth/register-verify/POST';
-import registerHandler from '../src/server/api/auth/register/POST';
-import resendOtpHandler from '../src/server/api/auth/resend-otp/POST';
-import registerResendOtpHandler from '../src/server/api/auth/register-resend-otp/POST';
-import meHandler from '../src/server/api/auth/me/GET';
+import loginInitiateHandler from '../src/server/api/auth/login-initiate/POST.ts';
+import loginVerifyHandler from '../src/server/api/auth/login-verify/POST.ts';
+import loginHandler from '../src/server/api/auth/login/POST.ts';
+import registerInitiateHandler from '../src/server/api/auth/register-initiate/POST.ts';
+import registerVerifyHandler from '../src/server/api/auth/register-verify/POST.ts';
+import registerHandler from '../src/server/api/auth/register/POST.ts';
+import resendOtpHandler from '../src/server/api/auth/resend-otp/POST.ts';
+import registerResendOtpHandler from '../src/server/api/auth/register-resend-otp/POST.ts';
+import meHandler from '../src/server/api/auth/me/GET.ts';
 
 // SOS Handlers
-import sosHandler from '../src/server/api/sos/POST';
-import sosActiveHandler from '../src/server/api/sos/active/GET';
-import sosHistoryHandler from '../src/server/api/sos/history/GET';
-import sosResolveHandler from '../src/server/api/sos/resolve/POST';
+import sosHandler from '../src/server/api/sos/POST.ts';
+import sosActiveHandler from '../src/server/api/sos/active/GET.ts';
+import sosHistoryHandler from '../src/server/api/sos/history/GET.ts';
+import sosResolveHandler from '../src/server/api/sos/resolve/POST.ts';
 
 // Voice Config Handlers
-import voiceGetHandler from '../src/server/api/voice/config/GET';
-import voicePutHandler from '../src/server/api/voice/config/PUT';
+import voiceGetHandler from '../src/server/api/voice/config/GET.ts';
+import voicePutHandler from '../src/server/api/voice/config/PUT.ts';
 
 // Contacts Handlers
-import contactsGetHandler from '../src/server/api/contacts/GET';
-import contactsPostHandler from '../src/server/api/contacts/POST';
-import contactsPutHandler from '../src/server/api/contacts/PUT';
-import contactsDeleteHandler from '../src/server/api/contacts/DELETE';
+import contactsGetHandler from '../src/server/api/contacts/GET.ts';
+import contactsPostHandler from '../src/server/api/contacts/POST.ts';
+import contactsPutHandler from '../src/server/api/contacts/PUT.ts';
+import contactsDeleteHandler from '../src/server/api/contacts/DELETE.ts';
 
 // Tracking Handlers
-import trackingUpdateHandler from '../src/server/api/tracking/update/POST';
-import trackingRiskZonesHandler from '../src/server/api/tracking/risk-zones/GET';
+import trackingUpdateHandler from '../src/server/api/tracking/update/POST.ts';
+import trackingRiskZonesHandler from '../src/server/api/tracking/risk-zones/GET.ts';
 
 // Vault Handlers
-import vaultGetHandler from '../src/server/api/vault/GET';
-import vaultPostHandler from '../src/server/api/vault/POST';
-import vaultDeleteHandler from '../src/server/api/vault/DELETE';
+import vaultGetHandler from '../src/server/api/vault/GET.ts';
+import vaultPostHandler from '../src/server/api/vault/POST.ts';
+import vaultDeleteHandler from '../src/server/api/vault/DELETE.ts';
 
 // Community Handlers
-import communityHelpersHandler from '../src/server/api/community/helpers/GET';
-import communityIncidentsHandler from '../src/server/api/community/incidents/GET';
-import communityRequestHelpHandler from '../src/server/api/community/request-help/POST';
+import communityHelpersHandler from '../src/server/api/community/helpers/GET.ts';
+import communityIncidentsHandler from '../src/server/api/community/incidents/GET.ts';
+import communityRequestHelpHandler from '../src/server/api/community/request-help/POST.ts';
 
 // Assistant Handler
-import assistantChatHandler from '../src/server/api/assistant/chat/POST';
+import assistantChatHandler from '../src/server/api/assistant/chat/POST.ts';
 
 // Admin Handlers
-import adminStatsHandler from '../src/server/api/admin/stats/GET';
-import adminUsersHandler from '../src/server/api/admin/users/GET';
-import adminAlertsHandler from '../src/server/api/admin/alerts/GET';
-import adminTestEmailHandler from '../src/server/api/admin/test-email/GET';
+import adminStatsHandler from '../src/server/api/admin/stats/GET.ts';
+import adminUsersHandler from '../src/server/api/admin/users/GET.ts';
+import adminAlertsHandler from '../src/server/api/admin/alerts/GET.ts';
+import adminTestEmailHandler from '../src/server/api/admin/test-email/GET.ts';
 
 // Health Handler
-import healthHandler from '../src/server/api/health/GET';
+import healthHandler from '../src/server/api/health/GET.ts';
 
 const app = express();
 
