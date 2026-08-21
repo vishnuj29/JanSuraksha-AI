@@ -75,8 +75,20 @@ app.use((req: Request, res: Response, next) => {
     return res.status(200).end();
   }
 
+  // Handle Vercel rewrite /api/:path* -> query.path
+  if (req.query && req.query.path) {
+    const subpath = Array.isArray(req.query.path) ? req.query.path.join('/') : req.query.path;
+    req.url = `/api/${subpath}`;
+  } else if (req.headers['x-forwarded-uri']) {
+    req.url = req.headers['x-forwarded-uri'] as string;
+  }
+
   next();
 });
+
+// Root / health endpoints
+app.get('/', (req, res) => res.json({ status: 'ok', message: 'JanSuraksha API Root Active' }));
+app.get('/api', (req, res) => res.json({ status: 'ok', message: 'JanSuraksha API Active' }));
 
 // Helper for mount matching both /api/path and /path
 const mount = (route: string, method: 'get' | 'post' | 'put' | 'delete', handler: (req: Request, res: Response) => any) => {
