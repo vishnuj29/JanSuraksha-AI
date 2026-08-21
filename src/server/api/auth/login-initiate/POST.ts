@@ -11,28 +11,36 @@ export default async function handler(req: Request, res: Response) {
   try {
     const { email, password } = req.body || {};
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    if (!email || typeof email !== 'string' || !email.includes('@')) {
+      return res.status(400).json({ success: false, message: 'Valid email is required' });
     }
 
-    const user = dbStore.findUserByEmail(email);
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password' });
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const user = dbStore.findUserByEmail(cleanEmail);
 
-    const isMatch = bcryptjs.compareSync(password, user.passwordHash);
-    if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    if (password && user) {
+      const isMatch = bcryptjs.compareSync(password, user.passwordHash);
+      if (!isMatch) {
+        return res.status(401).json({ success: false, message: 'Invalid email or password' });
+      }
     }
 
     // Generate 6-digit numeric OTP code
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    dbStore.setOtp(user.email, otp);
+    dbStore.setOtp(cleanEmail, otp);
 
     // Send Mail OTP via SMTP Protocol
-    const emailResult = await emailService.sendLoginOtpEmail(user.email, otp, user.name);
+    const emailResult = await emailService.sendLoginOtpEmail(cleanEmail, otp, user?.name || cleanEmail.split('@')[0]);
 
-    console.log(`[AUTH] Login OTP dispatched to ${user.email}. OTP: [${otp}]`);
+    if (!emailResult.success && emailResult.error) {
+      return res.status(500).json({
+        success: false,
+        message: `Email dispatch failed: ${emailResult.error}`,
+        error: emailResult.error,
+      });
+    }
+
+    console.log(`[AUTH] Login OTP dispatched to ${cleanEmail}. OTP: [${otp}]`);
 
     const maskedEmail = user.email.replace(/^(.)(.*)(@.*)$/, (_, first, middle, domain) => {
       return first + '*'.repeat(Math.max(1, middle.length)) + domain;

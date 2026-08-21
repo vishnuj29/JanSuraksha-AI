@@ -72,12 +72,15 @@ class EmailService {
   }
 
   private getFromAddress(): string {
-    const user = process.env.SMTP_USER || 'security@jansuraksha.ai';
+    const user = (process.env.SMTP_USER || '').trim();
+    if (user.includes('@')) {
+      return `"JanSuraksha AI Security" <${user}>`;
+    }
     const configuredFrom = process.env.SMTP_FROM;
     if (configuredFrom && configuredFrom.includes('@')) {
       return configuredFrom.replace(/^"+|"+$/g, '');
     }
-    return `"JanSuraksha AI Security" <${user}>`;
+    return `"JanSuraksha AI Security" <security@jansuraksha.ai>`;
   }
 
   /**
@@ -149,12 +152,16 @@ class EmailService {
 
         console.log(`[EmailService] ✅ Login OTP sent successfully to ${toEmail}. Message ID: ${info.messageId}`);
         return { success: true, messageId: info.messageId };
-      } catch (err) {
+      } catch (err: any) {
         console.error(`[EmailService] ❌ Failed to send email via SMTP to ${toEmail}:`, err);
+        return {
+          success: false,
+          error: err?.message || 'SMTP Authentication error. Please verify your Gmail App Password.',
+        };
       }
     }
 
-    // Fallback logger
+    // Fallback logger when credentials missing
     console.log('\n================== 📧 SMTP DEV EMAIL DISPATCH 📧 ==================');
     console.log(`To: ${toEmail}`);
     console.log(`Subject: 🔐 JanSuraksha AI — Login Verification Code: ${otp}`);
@@ -162,8 +169,9 @@ class EmailService {
     console.log('===================================================================\n');
 
     return {
-      success: true,
+      success: false,
       mock: true,
+      error: 'SMTP credentials (SMTP_USER / SMTP_PASS) not configured in Vercel environment.',
       messageId: `DEV_EMAIL_${Date.now()}`,
     };
   }
@@ -184,17 +192,17 @@ class EmailService {
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0a0a0f; color: #ffffff; margin: 0; padding: 20px; }
         .container { max-width: 560px; margin: 0 auto; background: #0d1b3e; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; overflow: hidden; }
-        .header { background: linear-gradient(135deg, #b91c1c, #991b1b); padding: 28px 24px; text-align: center; }
+        .header { background: linear-gradient(135deg, #1e3a8a, #0d1b3e); padding: 28px 24px; text-align: center; }
         .logo-text { font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; }
-        .logo-sub { font-size: 11px; font-weight: 600; color: #fca5a5; letter-spacing: 2px; text-transform: uppercase; }
+        .logo-sub { font-size: 13px; color: #93c5fd; margin-top: 4px; }
         .content { padding: 32px 24px; }
-        .greeting { font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #f8fafc; }
-        .description { font-size: 14px; color: #94a3b8; line-height: 1.6; margin-bottom: 24px; }
-        .otp-card { background: rgba(0,0,0,0.3); border: 2px dashed #ef4444; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px; }
-        .otp-code { font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #ffffff; font-family: monospace; }
-        .otp-validity { font-size: 12px; color: #f87171; margin-top: 6px; font-weight: 600; }
-        .warning-box { background: rgba(239, 68, 68, 0.08); border-left: 4px solid #ef4444; padding: 12px 16px; border-radius: 4px; font-size: 12px; color: #cbd5e1; margin-bottom: 24px; }
-        .footer { background: #080d1a; padding: 20px 24px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.06); }
+        .greeting { font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 12px; }
+        .description { font-size: 14px; line-height: 1.6; color: #cbd5e1; margin-bottom: 24px; }
+        .otp-card { background: rgba(30, 58, 138, 0.4); border: 2px solid #3b82f6; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0; }
+        .otp-code { font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #60a5fa; font-family: 'Courier New', monospace; }
+        .otp-validity { font-size: 12px; color: #93c5fd; margin-top: 8px; }
+        .warning-box { background: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; padding: 12px 16px; border-radius: 6px; font-size: 12px; color: #fca5a5; margin: 20px 0; }
+        .footer { background: #080d1a; padding: 20px 24px; text-align: center; font-size: 11px; color: #64748b; }
       </style>
     </head>
     <body>
@@ -237,8 +245,12 @@ class EmailService {
 
         console.log(`[EmailService] ✅ Registration OTP sent to ${toEmail}. Message ID: ${info.messageId}`);
         return { success: true, messageId: info.messageId };
-      } catch (err) {
+      } catch (err: any) {
         console.error(`[EmailService] ❌ Failed to send registration email via SMTP to ${toEmail}:`, err);
+        return {
+          success: false,
+          error: err?.message || 'SMTP Authentication error. Please verify your Gmail App Password.',
+        };
       }
     }
 
@@ -250,8 +262,9 @@ class EmailService {
     console.log('====================================================================\n');
 
     return {
-      success: true,
+      success: false,
       mock: true,
+      error: 'SMTP credentials (SMTP_USER / SMTP_PASS) not configured in Vercel environment.',
       messageId: `DEV_REG_EMAIL_${Date.now()}`,
     };
   }

@@ -43,7 +43,15 @@ export default async function handler(req: Request, res: Response) {
     });
 
     // Send 6-digit OTP via SMTP
-    await emailService.sendRegistrationOtpEmail(cleanEmail, otp, name.trim());
+    const emailResult = await emailService.sendRegistrationOtpEmail(cleanEmail, otp, name.trim());
+
+    if (!emailResult.success && emailResult.error) {
+      return res.status(500).json({
+        success: false,
+        message: `Email delivery failed: ${emailResult.error}`,
+        error: emailResult.error,
+      });
+    }
 
     console.log(`[AUTH] Registration OTP generated and dispatched via SMTP for ${cleanEmail}`);
 
