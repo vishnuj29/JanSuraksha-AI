@@ -1,5 +1,6 @@
 import bcryptjs from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { mysqlService } from './mysqlService';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'jansuraksha-enterprise-jwt-super-secret-key-2026';
 
@@ -346,6 +347,21 @@ class DBStore {
     };
 
     this.users.set(emailKey, newUser);
+
+    // Sync to MySQL in background if connected
+    mysqlService.insertUser({
+      id: newUser.id,
+      name: newUser.name,
+      email: newUser.email,
+      passwordHash: newUser.passwordHash,
+      phone: newUser.phone,
+      role: newUser.role,
+      plan: newUser.plan,
+      safetyScore: newUser.safetyScore,
+      avatar: newUser.avatar,
+      location: newUser.location,
+    }).catch(() => {});
+
     return newUser;
   }
 
@@ -556,6 +572,23 @@ class DBStore {
       id,
     };
     this.sosAlerts.unshift(newAlert);
+
+    // Sync to MySQL in background if connected
+    mysqlService.insertSOSAlert({
+      id: newAlert.id,
+      userId: newAlert.userId,
+      userName: newAlert.userName,
+      userEmail: newAlert.userEmail,
+      alertType: newAlert.alertType,
+      latitude: newAlert.latitude,
+      longitude: newAlert.longitude,
+      googleMapsUrl: newAlert.googleMapsUrl,
+      address: newAlert.locationName,
+      status: newAlert.status,
+      respondersNotified: newAlert.respondersNotified,
+      triggerPhrase: newAlert.triggerPhrase,
+    }).catch(() => {});
+
     return newAlert;
   }
 
